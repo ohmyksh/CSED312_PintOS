@@ -131,6 +131,9 @@ void thread_yield (void);
 
 /* modified for p1 */
 void thread_sleep(int64_t ticks);
+bool cmp_wakeup_tick(struct list_elem *prev, struct list_elem *next, void *aux UNUSED);
+void wake_thread(int64_t ticks);
+
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
@@ -145,3 +148,4 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 #endif /* threads/thread.h */
+

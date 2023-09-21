@@ -605,10 +605,22 @@ void thread_sleep(int64_t ticks)
   intr_set_level (old_level);
 }
 
-bool cmp_wakeup_tick(struct list_elem *prev, struct list_elem *next, void *aux)
+bool cmp_wakeup_tick(struct list_elem *prev, struct list_elem *next, void *aux UNUSED)
 {
   struct thread* prev_thread = list_entry(prev, struct thread, elem);
   struct thread* next_thread = list_entry(next, struct thread, elem);
 
   return ((prev_thread->wakeup_tick)<(next_thread->wakeup_tick));
+}
+
+void wake_thread(int64_t ticks)
+{
+  struct list_elem* iter; 
+  for (iter = list_begin(&sleep_list); iter != list_end(&sleep_list);)
+  {
+    struct thread* cur = list_entry(iter, struct thread, elem);
+    if (cur->wakeup_tick > ticks) break;
+    iter = list_remove(iter);
+    thread_unblock(cur);
+  }
 }
