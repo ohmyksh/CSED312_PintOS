@@ -65,7 +65,7 @@ typedef int tid_t;
       2. Second, kernel stacks must not be allowed to grow too
          large.  If a stack overflows, it will corrupt the thread
          state.  Thus, kernel functions should not allocate large
-         structures or arrays as non-static local variables.  Use
+         structures or arrays as non-static local variables.  Usestruct thread
          dynamic allocation with malloc() or palloc_get_page()
          instead.
 
@@ -92,6 +92,9 @@ struct thread
 
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
+    /* modified for lab1_1 */
+    int64_t wakeup_tick;
+    
 
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
@@ -125,6 +128,9 @@ const char *thread_name (void);
 
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
+
+/* modified for p1 */
+void thread_sleep(int64_t ticks);
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
