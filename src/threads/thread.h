@@ -129,9 +129,9 @@ const char *thread_name (void);
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
 
-/* modified for p1 */
+/* modified for lab1_1 */
 void thread_sleep(int64_t ticks);
-bool cmp_wakeup_tick(struct list_elem *prev, struct list_elem *next, void *aux UNUSED);
+bool cmp_wakeup_tick(const struct list_elem *prev, const struct list_elem *next, void *aux UNUSED);
 void wake_thread(int64_t ticks);
 
 
@@ -148,4 +148,8 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 #endif /* threads/thread.h */
+
+/* modified for lab1_2 */
+bool cmp_priority(const struct list_elem *t1, const struct list_elem *t2, void *aux UNUSED);
+void check_priority_and_yield(void);
 
