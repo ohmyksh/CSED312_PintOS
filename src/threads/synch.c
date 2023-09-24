@@ -210,6 +210,7 @@ lock_acquire (struct lock *lock)
   if (lock->holder)
   {
     thread_current()->waiting_lock = lock;
+    list_insert_ordered(&lock->holder->donation_list, &thread_current()->donation_elem, cmp_priority, NULL);
     donate_priority();
   }
 
@@ -250,18 +251,20 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
-  lock->holder = NULL;
-
   /* modified for donation in lab1_2 */
   // 1. update donation list
   delete_donation_list(lock);
   // 2. update current thread's priority to original
-  struct thread *cur = thread_current();
+  struct thread *cur = lock->holder; // lock holder is current thread
   cur->priority = cur->original_priority;
   // 3. update current thread's priority according to donation list
-  int max_priority = (list_entry(list_begin(&cur->donation_list), struct thread, donation_elem))->priority;
-  cur->priority = cur->priority < max_priority ? max_priority : cur->priority;
-
+  if(!list_empty(&cur->donation_list))
+  {
+    list_sort(&cur->donation_list, cmp_priority, NULL);
+    int max_priority = (list_entry(list_begin(&cur->donation_list), struct thread, donation_elem))->priority;
+    cur->priority = cur->priority < max_priority ? max_priority : cur->priority;
+  }
+  lock->holder = NULL;
   sema_up (&lock->semaphore);
 }
 
@@ -393,9 +396,8 @@ void donate_priority(void)
 {
   struct thread* cur = thread_current();
   int level;
-  struct thread * holder;
-
-  for (level = 0; level < 8 ;level++)
+  struct thread *holder;
+  for (level = 0; level<8 ;level++)
   {
     if(cur->waiting_lock != NULL)
     {
@@ -403,7 +405,6 @@ void donate_priority(void)
       if(cur->priority > holder->priority) // donation
       {
         holder->priority = cur->priority;
-        list_insert_ordered(&holder->donation_list, &cur->donation_elem, cmp_priority, NULL);
       }
       cur = holder;
     }
@@ -420,9 +421,9 @@ void delete_donation_list(struct lock* lock) // update donation list
   struct list_elem *elem;
   struct thread* donation_thread;
 
-  for (elem = list_begin(list_of_donation);elem != list_end(list_of_donation); elem=list_next(elem))
+  for (elem = list_begin(list_of_donation); elem != list_end(list_of_donation); elem = list_next(elem))
   {
-    donation_thread = list_entry(elem ,struct thread, donation_elem);
+    donation_thread = list_entry(elem, struct thread, donation_elem);
     if (donation_thread->waiting_lock == lock)
     {
       list_remove(elem);

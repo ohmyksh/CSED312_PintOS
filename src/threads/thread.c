@@ -348,7 +348,17 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->priority = new_priority;
+  thread_current ()->original_priority = new_priority;
+  // modified for donation
+  struct thread *cur = thread_current();
+  cur->priority = cur->original_priority;
+  // 3. update current thread's priority according to donation list
+  if(!list_empty(&cur->donation_list))
+  {
+    list_sort(&cur->donation_list, cmp_priority, NULL);
+    int max_priority = (list_entry(list_begin(&cur->donation_list), struct thread, donation_elem))->priority;
+    cur->priority = cur->priority < max_priority ? max_priority : cur->priority;
+  }
   /* modified for lab1_2 */
   //compare current thread's priority with new thread's priority
   check_priority_and_yield();
