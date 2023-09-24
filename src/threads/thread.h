@@ -102,6 +102,10 @@ struct thread
     // List of higher priority threads that donated to the thread
     struct list donation_list; // for multiple donation
     struct list_elem donation_elem;
+
+    /* modified for lab1_3 */
+    int nice;
+    int recent_cpu;
     
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
