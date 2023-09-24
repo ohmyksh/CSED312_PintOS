@@ -41,6 +41,9 @@ void cond_wait (struct condition *, struct lock *);
 void cond_signal (struct condition *, struct lock *);
 void cond_broadcast (struct condition *, struct lock *);
 
+/* modified for lab1_2 */
+bool cmp_sema_priority (const struct list_elem *s1, const struct list_elem *s2, void *aux);
+
 /* Optimization barrier.
 
    The compiler will not reorder operations across an
@@ -49,3 +52,4 @@ void cond_broadcast (struct condition *, struct lock *);
 #define barrier() asm volatile ("" : : : "memory")
 
 #endif /* threads/synch.h */
+

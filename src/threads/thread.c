@@ -204,6 +204,9 @@ thread_create (const char *name, int priority,
 
   /* Add to run queue. */
   thread_unblock (t);
+  /* modified for lab1_2 */
+  //compare current thread's priority with new thread's priority
+  check_priority_and_yield();
 
   return tid;
 }
@@ -241,7 +244,9 @@ thread_unblock (struct thread *t)
 
   old_level = intr_disable ();
   ASSERT (t->status == THREAD_BLOCKED);
-  list_push_back (&ready_list, &t->elem);
+  /* modified for lab1_2 */
+  //list_push_back (&ready_list, &t->elem);
+  list_insert_ordered(&ready_list, &t->elem, cmp_priority, NULL);
   t->status = THREAD_READY;
   intr_set_level (old_level);
 }
@@ -312,7 +317,9 @@ thread_yield (void)
 
   old_level = intr_disable ();
   if (cur != idle_thread) 
-    list_push_back (&ready_list, &cur->elem);
+    /* modified for lab1_2 */
+    //list_push_back (&ready_list, &cur->elem);
+    list_insert_ordered(&ready_list, &cur->elem, cmp_priority, NULL);
   cur->status = THREAD_READY;
   schedule ();
   intr_set_level (old_level);
@@ -341,6 +348,10 @@ void
 thread_set_priority (int new_priority) 
 {
   thread_current ()->priority = new_priority;
+  /* modified for lab1_2 */
+  //compare current thread's priority with new thread's priority
+  check_priority_and_yield();
+
 }
 
 /* Returns the current thread's priority. */
@@ -605,7 +616,7 @@ void thread_sleep(int64_t ticks)
   intr_set_level (old_level);
 }
 
-bool cmp_wakeup_tick(struct list_elem *prev, struct list_elem *next, void *aux UNUSED)
+bool cmp_wakeup_tick(const struct list_elem *prev, const struct list_elem *next, void *aux UNUSED)
 {
   struct thread* prev_thread = list_entry(prev, struct thread, elem);
   struct thread* next_thread = list_entry(next, struct thread, elem);
@@ -615,7 +626,7 @@ bool cmp_wakeup_tick(struct list_elem *prev, struct list_elem *next, void *aux U
 
 void wake_thread(int64_t ticks)
 {
-  struct list_elem* iter; 
+  struct list_elem* iter;
   for (iter = list_begin(&sleep_list); iter != list_end(&sleep_list);)
   {
     struct thread* cur = list_entry(iter, struct thread, elem);
@@ -624,3 +635,24 @@ void wake_thread(int64_t ticks)
     thread_unblock(cur);
   }
 }
+
+/* modified for lab1_2 */
+bool cmp_priority(const struct list_elem *t1, const struct list_elem *t2, void *aux UNUSED)
+{
+  return list_entry(t1, struct thread, elem)->priority > list_entry(t2, struct thread, elem)->priority;
+}
+
+void check_priority_and_yield(void)
+{
+  int max_priority;
+  if(!list_empty(&ready_list))
+  {
+    max_priority = list_entry(list_front(&ready_list),struct thread, elem)->priority;
+    if(thread_get_priority() < max_priority)
+    {
+      thread_yield();
+    }
+  }
+}
+
+/*pintos_sohyun_check_0924*/
