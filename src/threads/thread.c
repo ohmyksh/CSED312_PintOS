@@ -624,3 +624,5 @@ void wake_thread(int64_t ticks)
     thread_unblock(cur);
   }
 }
+
+fldfafa
