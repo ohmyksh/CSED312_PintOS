@@ -94,8 +94,15 @@ struct thread
     struct list_elem elem;              /* List element. */
     /* modified for lab1_1 */
     int64_t wakeup_tick;
-    
 
+    /* modified for lab1_2 */
+    int original_priority; // priority before donation
+    struct lock *waiting_lock; // lock that thread is waiting for
+
+    // List of higher priority threads that donated to the thread
+    struct list donation_list; // for multiple donation
+    struct list_elem donation_elem;
+    
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
@@ -133,7 +140,6 @@ void thread_yield (void);
 void thread_sleep(int64_t ticks);
 bool cmp_wakeup_tick(const struct list_elem *prev, const struct list_elem *next, void *aux UNUSED);
 void wake_thread(int64_t ticks);
-
 
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);

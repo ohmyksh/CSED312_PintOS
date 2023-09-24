@@ -96,6 +96,7 @@ thread_init (void)
   list_init (&all_list);
   /* modified for p1 */
   list_init (&sleep_list);
+  /* modified for lab1_2 */
 
   /* Set up a thread structure for the running thread. */
   initial_thread = running_thread ();
@@ -480,6 +481,11 @@ init_thread (struct thread *t, const char *name, int priority)
   t->priority = priority;
   t->magic = THREAD_MAGIC;
 
+  /* modified for lab1_2 */
+  t->original_priority = priority;
+  t->waiting_lock = NULL;
+  list_init(&t->donation_list);
+
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
@@ -654,5 +660,3 @@ void check_priority_and_yield(void)
     }
   }
 }
-
-/*pintos_sohyun_check_0924*/

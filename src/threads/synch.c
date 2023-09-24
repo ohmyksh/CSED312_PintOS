@@ -203,7 +203,19 @@ lock_acquire (struct lock *lock)
   ASSERT (!intr_context ());
   ASSERT (!lock_held_by_current_thread (lock));
 
+  // when lock holder exists
+  // 1. update waiting lock 
+  // 2. Add the current thread to the donation list of the lock
+  // 3. call donate_priority() for priority donation
+  if (lock->holder)
+  {
+    thread_current()->waiting_lock = lock;
+    donate_priority();
+  }
+
+  // try to acquire lock
   sema_down (&lock->semaphore);
+  thread_current()->waiting_lock = NULL;
   lock->holder = thread_current ();
 }
 
@@ -239,6 +251,17 @@ lock_release (struct lock *lock)
   ASSERT (lock_held_by_current_thread (lock));
 
   lock->holder = NULL;
+
+  /* modified for donation in lab1_2 */
+  // 1. update donation list
+  delete_donation_list(lock);
+  // 2. update current thread's priority to original
+  struct thread *cur = thread_current();
+  cur->priority = cur->original_priority;
+  // 3. update current thread's priority according to donation list
+  int max_priority = (list_entry(list_begin(&cur->donation_list), struct thread, donation_elem))->priority;
+  cur->priority = cur->priority < max_priority ? max_priority : cur->priority;
+
   sema_up (&lock->semaphore);
 }
 
@@ -364,4 +387,45 @@ bool cmp_sema_priority (const struct list_elem *s1, const struct list_elem *s2, 
   int sema2_priority = list_entry(max_thread_sema2, struct thread, elem)->priority;
 
   return sema1_priority > sema2_priority;
+}
+
+void donate_priority(void)
+{
+  struct thread* cur = thread_current();
+  int level;
+  struct thread * holder;
+
+  for (level = 0; level < 8 ;level++)
+  {
+    if(cur->waiting_lock != NULL)
+    {
+      holder = cur->waiting_lock->holder;
+      if(cur->priority > holder->priority) // donation
+      {
+        holder->priority = cur->priority;
+        list_insert_ordered(&holder->donation_list, &cur->donation_elem, cmp_priority, NULL);
+      }
+      cur = holder;
+    }
+    else
+    {
+      break;
+    }
+  }
+}
+
+void delete_donation_list(struct lock* lock) // update donation list
+{
+  struct list *list_of_donation = &thread_current()->donation_list;
+  struct list_elem *elem;
+  struct thread* donation_thread;
+
+  for (elem = list_begin(list_of_donation);elem != list_end(list_of_donation); elem=list_next(elem))
+  {
+    donation_thread = list_entry(elem ,struct thread, donation_elem);
+    if (donation_thread->waiting_lock == lock)
+    {
+      list_remove(elem);
+    }
+  }
 }
