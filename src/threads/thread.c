@@ -734,5 +734,5 @@ void mlfqs_calculate_load_avg (void)
   // 2. ready_threads	
   int ready_threads = (cur != idle_thread) ? (list_size(&ready_list)+1) : list_size(&ready_list);	
   // 3. load_avg = temp + (1/60) * ready_threads	
-  load_avg = add_x_y(temp, mul_x_by_y(div_x_by_y(convert_n_to_fp(1), convert_n_to_fp(60)), ready_threads));	
+  load_avg = add_x_y(temp, mul_x_by_n(div_x_by_y(convert_n_to_fp(1), convert_n_to_fp(60)), ready_threads));	
 }
