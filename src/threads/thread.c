@@ -721,7 +721,7 @@ void mlfqs_calculate_recent_cpu ()
       // 2. temp = temp * recent_cpu	
       temp = mul_x_by_y(temp, cur->recent_cpu);	
       // 3. recent_cpu = temp + nice	
-      cur->recent_cpu = add_x_y(temp, cur->nice);	
+      cur->recent_cpu = add_x_n(temp, cur->nice);	
     }	
   }	
 }	
