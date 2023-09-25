@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/fixed_point.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -349,17 +350,24 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->original_priority = new_priority;
+   thread_current ()->priority = new_priority;
+
   // modified for donation
   struct thread *cur = thread_current();
-  cur->priority = cur->original_priority;
-  // 3. update current thread's priority according to donation list
-  if(!list_empty(&cur->donation_list))
+  /* modified for lab1_3 */
+  if (!thread_mlfqs)
   {
-    list_sort(&cur->donation_list, cmp_priority, NULL);
-    int max_priority = (list_entry(list_begin(&cur->donation_list), struct thread, donation_elem))->priority;
-    cur->priority = cur->priority < max_priority ? max_priority : cur->priority;
+    thread_current ()->original_priority = new_priority;
+    cur->priority = cur->original_priority;
+    // 3. update current thread's priority according to donation list
+    if(!list_empty(&cur->donation_list))
+    {
+      list_sort(&cur->donation_list, cmp_priority, NULL);
+      int max_priority = (list_entry(list_begin(&cur->donation_list), struct thread, donation_elem))->priority;
+      cur->priority = cur->priority < max_priority ? max_priority : cur->priority;
+    }
   }
+  
   /* modified for lab1_2 */
   //compare current thread's priority with new thread's priority
   check_priority_and_yield();
@@ -377,31 +385,28 @@ thread_get_priority (void)
 void
 thread_set_nice (int nice UNUSED) 
 {
-  /* Not yet implemented. */
+  thread_current()->nice = nice;
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return convert_x_to_int_nearest(mul_x_by_n(load_avg, 100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return convert_x_to_int_nearest(mul_x_by_n(thread_current()->recent_cpu, 100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
@@ -674,4 +679,60 @@ void check_priority_and_yield(void)
       thread_yield();
     }
   }
+}
+
+/* modified for lab1_3 */
+void mlfqs_increment_recent_cpu (struct thread* t)
+{
+  if (t != idle_thread)
+  {
+    t->recent_cpu = add_x_n(t->recent_cpu, 1);
+  }
+}
+void mlfqs_calculate_priority ()
+{
+  struct thread* cur;
+  struct list_elem* elem;
+  for (elem = list_begin(&all_list); elem != list_end(&all_list); elem = list_next(elem))
+  {
+    cur = list_entry(elem, struct thread, allelem);
+    // priority calculation = PRI_MAX - (recent_cpu/4) - (nice * 2)
+    if (cur != idle_thread)
+    {
+      // 1. PRI_MAX - (recent_cpu/4) -> rounding since recent_cpu is real number
+      int temp = sub_y_from_x(PRI_MAX, convert_x_to_int_nearest(div_x_by_n(cur->recent_cpu, 4)));
+      cur->priority = sub_y_from_x(temp, mul_x_by_n(cur->nice, 2));
+    }
+  }
+}
+
+void mlfqs_calculate_recent_cpu ()
+{
+  struct thread* cur;
+  struct list_elem* elem;
+  for (elem = list_begin(&all_list); elem != list_end(&all_list); elem = list_next(elem))
+  {
+    cur = list_entry(elem, struct thread, allelem);
+    // recent_cpu = (2*load_avg)/(2*load_avg+1) * recent_cpu + nice
+    if (cur != idle_thread)
+    {
+      // 1. temp = (2*load_avg)/(2*load_avg+1)
+      int temp = div_x_by_y(mul_x_by_n(load_avg, 2), add_x_n((mul_x_by_n(load_avg, 2)), 1));
+      // 2. temp = temp * recent_cpu
+      temp = mul_x_by_y(temp, cur->recent_cpu);
+      // 3. recent_cpu = temp + nice
+      cur->recent_cpu = add_x_y(temp, cur->nice);
+    }
+  }
+}
+void mlfqs_calculate_load_avg (void)
+{
+  struct thread* cur = thread_current();
+  // load_avg = (59/60) * load_avg + (1/60) * ready_threads
+  // 1.temp = (59/60) * load_avg
+  int temp = mul_x_by_y(div_x_by_y(convert_n_to_fp(59), convert_n_to_fp(60)), load_avg);
+  // 2. ready_threads
+  int ready_threads = (cur != idle_thread) ? (list_size(&ready_list)+1) : list_size(&ready_list);
+  // 3. load_avg = temp + (1/60) * ready_threads
+  load_avg = add_x_y(temp, mul_x_by_y(div_x_by_y(convert_n_to_fp(1), convert_n_to_fp(60)), ready_threads));
 }

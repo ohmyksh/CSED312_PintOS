@@ -163,3 +163,8 @@ int thread_get_load_avg (void);
 bool cmp_priority(const struct list_elem *t1, const struct list_elem *t2, void *aux UNUSED);
 void check_priority_and_yield(void);
 
+/* modified for lab1_3 */
+void mlfqs_increment_recent_cpu (struct thread* t);
+void mlfqs_calculate_priority (void);
+void mlfqs_calculate_recent_cpu (void);
+void mlfqs_calculate_load_avg (void);
