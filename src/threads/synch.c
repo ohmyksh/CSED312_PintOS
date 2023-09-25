@@ -207,16 +207,22 @@ lock_acquire (struct lock *lock)
   // 1. update waiting lock 
   // 2. Add the current thread to the donation list of the lock
   // 3. call donate_priority() for priority donation
-  if (lock->holder)
+  /* modified for lab1_3*/
+  if (!thread_mlfqs)
   {
-    thread_current()->waiting_lock = lock;
-    list_insert_ordered(&lock->holder->donation_list, &thread_current()->donation_elem, cmp_priority, NULL);
-    donate_priority();
+    if (lock->holder)
+    {
+      thread_current()->waiting_lock = lock;
+      list_insert_ordered(&lock->holder->donation_list, &thread_current()->donation_elem, cmp_priority, NULL);
+      donate_priority();
+    }
   }
-
   // try to acquire lock
   sema_down (&lock->semaphore);
-  thread_current()->waiting_lock = NULL;
+  if (!thread_mlfqs)
+  {
+    thread_current()->waiting_lock = NULL;
+  }
   lock->holder = thread_current ();
 }
 
@@ -251,18 +257,22 @@ lock_release (struct lock *lock)
   ASSERT (lock != NULL);
   ASSERT (lock_held_by_current_thread (lock));
 
-  /* modified for donation in lab1_2 */
-  // 1. update donation list
-  delete_donation_list(lock);
-  // 2. update current thread's priority to original
-  struct thread *cur = lock->holder; // lock holder is current thread
-  cur->priority = cur->original_priority;
-  // 3. update current thread's priority according to donation list
-  if(!list_empty(&cur->donation_list))
+  /* modified for donation in lab1_3 */
+  if (!thread_mlfqs)
   {
-    list_sort(&cur->donation_list, cmp_priority, NULL);
-    int max_priority = (list_entry(list_begin(&cur->donation_list), struct thread, donation_elem))->priority;
-    cur->priority = cur->priority < max_priority ? max_priority : cur->priority;
+    /* modified for donation in lab1_2 */
+    // 1. update donation list
+    delete_donation_list(lock);
+    // 2. update current thread's priority to original
+    struct thread *cur = lock->holder; // lock holder is current thread
+    cur->priority = cur->original_priority;
+    // 3. update current thread's priority according to donation list
+    if(!list_empty(&cur->donation_list))
+    {
+      list_sort(&cur->donation_list, cmp_priority, NULL);
+      int max_priority = (list_entry(list_begin(&cur->donation_list), struct thread, donation_elem))->priority;
+      cur->priority = cur->priority < max_priority ? max_priority : cur->priority;
+    }
   }
   lock->holder = NULL;
   sema_up (&lock->semaphore);

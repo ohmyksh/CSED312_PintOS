@@ -11,6 +11,7 @@
 #include "threads/switch.h"
 #include "threads/synch.h"
 #include "threads/vaddr.h"
+#include "threads/fixed_point.h"
 #ifdef USERPROG
 #include "userprog/process.h"
 #endif
@@ -349,17 +350,24 @@ thread_foreach (thread_action_func *func, void *aux)
 void
 thread_set_priority (int new_priority) 
 {
-  thread_current ()->original_priority = new_priority;
+   thread_current ()->priority = new_priority;
+
   // modified for donation
   struct thread *cur = thread_current();
-  cur->priority = cur->original_priority;
-  // 3. update current thread's priority according to donation list
-  if(!list_empty(&cur->donation_list))
+  /* modified for lab1_3 */
+  if (!thread_mlfqs)
   {
-    list_sort(&cur->donation_list, cmp_priority, NULL);
-    int max_priority = (list_entry(list_begin(&cur->donation_list), struct thread, donation_elem))->priority;
-    cur->priority = cur->priority < max_priority ? max_priority : cur->priority;
+    thread_current ()->original_priority = new_priority;
+    cur->priority = cur->original_priority;
+    // 3. update current thread's priority according to donation list
+    if(!list_empty(&cur->donation_list))
+    {
+      list_sort(&cur->donation_list, cmp_priority, NULL);
+      int max_priority = (list_entry(list_begin(&cur->donation_list), struct thread, donation_elem))->priority;
+      cur->priority = cur->priority < max_priority ? max_priority : cur->priority;
+    }
   }
+  
   /* modified for lab1_2 */
   //compare current thread's priority with new thread's priority
   check_priority_and_yield();
@@ -377,31 +385,28 @@ thread_get_priority (void)
 void
 thread_set_nice (int nice UNUSED) 
 {
-  /* Not yet implemented. */
+  thread_current()->nice = nice;
 }
 
 /* Returns the current thread's nice value. */
 int
 thread_get_nice (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return thread_current()->nice;
 }
 
 /* Returns 100 times the system load average. */
 int
 thread_get_load_avg (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return convert_x_to_int_nearest(mul_x_by_n(load_avg, 100));
 }
 
 /* Returns 100 times the current thread's recent_cpu value. */
 int
 thread_get_recent_cpu (void) 
 {
-  /* Not yet implemented. */
-  return 0;
+  return convert_x_to_int_nearest(mul_x_by_n(thread_current()->recent_cpu, 100));
 }
 
 /* Idle thread.  Executes when no other thread is ready to run.
