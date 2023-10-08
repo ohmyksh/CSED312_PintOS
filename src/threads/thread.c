@@ -178,7 +178,6 @@ thread_create (const char *name, int priority,
   struct switch_entry_frame *ef;
   struct switch_threads_frame *sf;
   tid_t tid;
-
   ASSERT (function != NULL);
 
   /* Allocate thread. */
@@ -210,7 +209,6 @@ thread_create (const char *name, int priority,
   /* modified for lab1_2 */
   //compare current thread's priority with new thread's priority
   check_priority_and_yield();
-
   return tid;
 }
 
@@ -676,7 +674,11 @@ void check_priority_and_yield(void)
     max_priority = list_entry(list_front(&ready_list),struct thread, elem)->priority;
     if(thread_get_priority() < max_priority)
     {
-      thread_yield();
+      //thread_yield();
+      if(!intr_context())
+      {
+        thread_yield();
+      }
     }
   }
 }
