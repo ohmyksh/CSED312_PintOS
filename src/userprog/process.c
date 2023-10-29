@@ -21,6 +21,8 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
+/* modified for lab2 */
+struct lock filesys_lock;
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -94,7 +96,8 @@ start_process (void *file_name_)
   {
     put_argv_stack(file_name, &if_.esp);
   }
-  hex_dump(if_.esp , if_.esp , PHYS_BASE - if_.esp,true);
+  sema_up(&thread_current()->sema_load);
+  // hex_dump(if_.esp , if_.esp , PHYS_BASE - if_.esp,true);
   palloc_free_page(fn_modified);
 
   /* If load failed, quit. */
@@ -126,9 +129,18 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  int i;
-  for (i = 0; i < 1000000000; i++);
-  return -1;
+  int status;
+  struct thread* child = get_child(child_tid);
+  if(!child)
+  {
+    return -1;
+  }
+
+  sema_down(&child->sema_exit);
+  status = child->exit_status;
+  remove_child(child);
+  return status;
+
 }
 
 /* Free the current process's resources. */
@@ -262,13 +274,20 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
+  /* modified for lab2_4 */
+  lock_acquire(&filesys_lock);
   file = filesys_open (file_name);
   if (file == NULL) 
     {
+      lock_release(&filesys_lock);
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
 
+  t->cur_file = file;
+  file_deny_write(file);
+  lock_release(&filesys_lock);
+  
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
@@ -559,4 +578,30 @@ void put_argv_stack(char *file_name, void **esp)
   palloc_free_page(argv_list);
   palloc_free_page(argv_addr);
   palloc_free_page(fn_modified);
+}
+
+/* modified for lab2_3 */
+struct thread* get_child(pid_t pid)
+{
+  struct list_elem *elem;
+  struct thread* t;
+  struct list *child_list = &(thread_current()->child_list);
+
+  for (elem = list_begin(child_list); elem != list_end(child_list) ; elem = list_next(elem))
+  {
+    t = list_entry(elem, struct thread, child_elem);
+    if(t->tid == pid)
+    {
+      return t;
+    }
+  }
+  return NULL;
+}
+void remove_child(struct thread* t)
+{
+  if(t)
+  {
+    list_remove(&(t->child_elem));
+    palloc_free_page(t);
+  }
 }

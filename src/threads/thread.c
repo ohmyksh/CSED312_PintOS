@@ -204,6 +204,25 @@ thread_create (const char *name, int priority,
   sf->eip = switch_entry;
   sf->ebp = 0;
 
+  /* modified for lab2_3 */
+  #ifdef USERPROG
+    t->parent = thread_current();
+    list_push_back(&(t->parent->child_list), &(t->child_elem));
+
+    t->isload = false;
+    t->isexit = false;
+    sema_init(&(t->sema_load), 0);
+    sema_init(&(t->sema_exit), 0);
+    
+    t->exit_status = -1;
+  
+    t->fd_table = palloc_get_page(0);
+    if(!(t->fd_table))
+    {
+      return TID_ERROR;
+    }
+    t->fd_max = 2;
+  #endif
   /* Add to run queue. */
   thread_unblock (t);
   /* modified for lab1_2 */
@@ -296,11 +315,20 @@ thread_exit (void)
   process_exit ();
 #endif
 
+  
   /* Remove thread from all threads list, set our status to dying,
-     and schedule another process.  That process will destroy us
-     when it calls thread_schedule_tail(). */
+    and schedule another process.  That process will destroy us
+    when it calls thread_schedule_tail(). */
   intr_disable ();
   list_remove (&thread_current()->allelem);
+
+  /* modified for lab2_3 */
+  thread_current()->isexit = true;
+  if(thread_current() != initial_thread)
+  {
+    sema_up(&(thread_current()->sema_exit));
+  }
+
   thread_current ()->status = THREAD_DYING;
   schedule ();
   NOT_REACHED ();
@@ -507,6 +535,9 @@ init_thread (struct thread *t, const char *name, int priority)
   old_level = intr_disable ();
   list_push_back (&all_list, &t->allelem);
   intr_set_level (old_level);
+
+  /* modified for lab2_3 */
+  list_init(&(t->child_list));
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and
