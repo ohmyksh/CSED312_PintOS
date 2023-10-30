@@ -3,7 +3,6 @@
 #include <syscall-nr.h>
 #include "threads/interrupt.h"
 #include "threads/thread.h"
-
 /* modified for lab2_2 */
 #include "threads/vaddr.h"
 #include "devices/shutdown.h"
@@ -23,69 +22,66 @@ syscall_init (void)
   lock_init(&filesys_lock);
 }
 
+
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
-  uint32_t *stack_ptr = f->esp;
-  if (!is_valid_addr((void *)stack_ptr))
-  {
-    exit(-1);
-  }
+  is_valid_addr((void *)(f->esp));
+  for (int i = 0; i < 3; i++) 
+    is_valid_addr(f->esp + 4*i);
 
-  int syscall_num = *stack_ptr;
   int argv[3];
-
-  switch(syscall_num)
+  switch(*(uint32_t *)(f->esp))
   {
     case SYS_HALT:
       halt();
       break;
     case SYS_EXIT:
-      get_argument(stack_ptr+4, argv, 1);
+      get_argument(f->esp+4, argv, 1);
       exit((int)argv[0]);
       break;
     case SYS_EXEC:
-      get_argument(stack_ptr+4, argv, 1);
+      get_argument(f->esp+4, argv, 1);
       f->eax = exec((const char*)argv[0]);
       break;
     case SYS_WAIT:
-      get_argument(stack_ptr+4, argv, 1);
+      get_argument(f->esp+4, argv, 1);
       f->eax = wait((pid_t)argv[0]);
       break;
     case SYS_CREATE:
-      get_argument(stack_ptr+4, argv, 2);
+      get_argument(f->esp+4, argv, 2);
       f->eax = create((const char*)argv[0], (unsigned)argv[1]);
       break;
     case SYS_REMOVE:
-      get_argument(stack_ptr+4, argv, 1);
+      get_argument(f->esp+4, argv, 1);
       f->eax = remove((const char*)argv[0]);
       break;
     case SYS_OPEN:
-      get_argument(stack_ptr+4, argv, 1);
+      get_argument(f->esp+4, argv, 1);
       f->eax = open((const char*)argv[0]);
       break;
     case SYS_FILESIZE:
-      get_argument(stack_ptr+4, argv, 1);
+      get_argument(f->esp+4, argv, 1);
       f->eax = filesize((int)argv[0]);
       break;
     case SYS_READ:
-      get_argument(stack_ptr+4, argv, 3);
+      get_argument(f->esp+4, argv, 3);
       f->eax = read((int)argv[0], (void *)argv[1], (unsigned)argv[2]);
       break;
     case SYS_WRITE:
-      get_argument(stack_ptr+4, argv, 3);
+      get_argument(f->esp+4, argv, 3);
       f->eax = write((int)argv[0], (const void *)argv[1], (unsigned)argv[2]);
       break;
     case SYS_SEEK:
-      get_argument(stack_ptr+4, argv, 2);
+      get_argument(f->esp+4, argv, 2);
       seek((int)argv[0], (unsigned)argv[1]);
       break;
     case SYS_TELL:
-      get_argument(stack_ptr+4, argv, 1);
+      get_argument(f->esp+4, argv, 1);
       f->eax = tell((int)argv[0]);
       break;
     case SYS_CLOSE:
-      get_argument(stack_ptr+4, argv, 1);
+      get_argument(f->esp+4, argv, 1);
       close((int)argv[0]);
       break;
     default:
@@ -94,16 +90,10 @@ syscall_handler (struct intr_frame *f UNUSED)
 }
 
 /* modified for lab2_2 */
-bool is_valid_addr(void *addr)
+void is_valid_addr(void *addr)
 {
-  if(is_user_vaddr(addr))
-  {
-    return true;
-  }
-  else
-  {
-    return false;
-  }
+  if (!addr || !is_user_vaddr(addr) || !pagedir_get_page(thread_current()->pagedir, addr)) 
+    exit(-1);
 }
 
 void get_argument(void *esp, int *arg, int count)
@@ -114,10 +104,7 @@ void get_argument(void *esp, int *arg, int count)
   {
     // argument position
     arg_pos=esp+4*i;
-    if(!is_valid_addr(arg_pos))
-    {
-      exit(-1);
-    }
+    is_valid_addr(arg_pos);
     arg[i]=*(int*)(arg_pos);
   }
 }
@@ -143,27 +130,40 @@ void exit(int status)
 
 pid_t exec (const char *cmd_line)
 {
+  char *ptr = cmd_line;
   struct thread* child;
   pid_t pid;
-  
+
   // 1. check cmd_line address
-  // is_valid_addr(cmd_line);
+  while (true) {
+    is_valid_addr(ptr);
+    if(*ptr == '\0')
+    {
+      break;
+    }
+    ptr++;
+  }
+  
   // 2. create child process
   pid = process_execute(cmd_line);
   if(pid == -1)
   {
     return -1;
   }
+
   // 3. get process descriptor of child process
   child = get_child(pid);
+
   // 4. wait until child process is loaded
   sema_down(&(child->sema_load));
+
   // 5. return
   if(child->isload)
     return pid;
   else
     return -1;
 }
+
 
 int wait (pid_t pid)
 {
@@ -178,6 +178,7 @@ bool create(const char* file, unsigned initial_size)
   Returns true if successful, false otherwise. 
   Creating a new file does not open it: opening the new file is a separate operation which would require a open system call.
   */
+  is_valid_addr((void*)file);
   if(!file)
   {
     exit(-1);
@@ -210,12 +211,8 @@ int open (const char *file)
  int fd;
  struct file* f;
  struct thread* cur;
- if(!file)
- {
-  exit(-1);
- }
 
- /* lock will be needed */
+ is_valid_addr((void*)file);
 
  f = filesys_open(file);
  if(f==NULL)
@@ -260,7 +257,7 @@ struct file *process_get_file(int fd)
     f = thread_current()->fd_table[fd];
     return f;
   }
-  return NULL;
+  return NULL; 
 }
 
 int read (int fd, void *buffer, unsigned size)
@@ -272,10 +269,7 @@ int read (int fd, void *buffer, unsigned size)
   struct file *f;
   unsigned i;
   for (i = 0; i < size; i++)
-    if(!is_valid_addr(buffer + i))
-    {
-      exit(-1);
-    }
+    is_valid_addr(buffer+i);
 
   if(fd==0)
   {
@@ -296,7 +290,6 @@ int read (int fd, void *buffer, unsigned size)
     {
       return -1;
     }
-    /* we need lock */
     lock_acquire(&filesys_lock);
     bytes_read = file_read(f, buffer, size);
     lock_release(&filesys_lock);
@@ -314,12 +307,18 @@ int write (int fd, const void *buffer, unsigned size)
   
   Fd 1 writes to the console -> should write all of buffer in one call to putbuf()
   */
+  
  int bytes_write = 0;
  struct file* f;
+ unsigned i;
+  for (i = 0; i < size; i++)
+    is_valid_addr(buffer+i);
 
  if(fd == 1)
  {
+  lock_acquire(&filesys_lock);
   putbuf(buffer, size);
+  lock_release(&filesys_lock);
   return size;
  }
  else if(fd > 1)
@@ -329,7 +328,6 @@ int write (int fd, const void *buffer, unsigned size)
     {
       return -1;
     }
-    /* we need lock */
     lock_acquire(&filesys_lock);
     bytes_write = file_write(f, buffer, size);
     lock_release(&filesys_lock);
@@ -382,5 +380,4 @@ void close (int fd)
       thread_current()->fd_table[fd] = NULL;
     }
   }
-  else return;
 }

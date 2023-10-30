@@ -4,9 +4,8 @@
 typedef int pid_t;
 
 void syscall_init (void);
-
 /* modified for lab2_2 */
-bool is_valid_addr(void *addr);
+void is_valid_addr(void *addr);
 void get_argument(void *esp, int *arg, int count);
 struct file *process_get_file(int fd);
 void halt(void);
@@ -25,9 +24,5 @@ int write (int fd, const void *buffer, unsigned size);
 void seek (int fd, unsigned position);
 unsigned tell (int fd);
 void close (int fd);
-
-/* for file descriptor*/
-
-
 
 #endif /* userprog/syscall.h */

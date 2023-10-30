@@ -21,8 +21,6 @@
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 
-/* modified for lab2 */
-struct lock filesys_lock;
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
    before process_execute() returns.  Returns the new process's
@@ -32,11 +30,10 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
-  /* modified for lab2_1 */
+  /* modified for lab2_2 */
   char *fn_modified;
   char *fn_first_token;
   char *fn_remain;
-  //printf("\nprocess_execute : start\n");
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
@@ -49,8 +46,6 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_modified, file_name, PGSIZE);
   fn_first_token = strtok_r(fn_modified, " ", &fn_remain);
-  
-  //printf("%s\n", fn_first_token);
 
   /* Create a new thread to execute FILE_NAME. */
   // tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
@@ -61,9 +56,9 @@ process_execute (const char *file_name)
     palloc_free_page (fn_copy); 
   }
   
-  /* modified for lab2_1 */
+  /* modified for lab2_2 */
   palloc_free_page (fn_modified);
-  //printf("\nprocess_execute : finished\n");
+
   return tid;
 }
 
@@ -75,7 +70,8 @@ start_process (void *file_name_)
   char *file_name = file_name_;
   struct intr_frame if_;
   bool success;
-  /* modified for lab2_1 */
+
+  /* modified for lab2_2 */
   char *fn_modified;
   char *fn_first_token;
   char *fn_remain;
@@ -89,23 +85,22 @@ start_process (void *file_name_)
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  // success = load (file_name, &if_.eip, &if_.esp);
+  //success = load (file_name, &if_.eip, &if_.esp);
   success = load (fn_first_token, &if_.eip, &if_.esp);
-
+  
   if (success)
   {
     put_argv_stack(file_name, &if_.esp);
+    thread_current()->isload = true;
   }
   sema_up(&thread_current()->sema_load);
-  // hex_dump(if_.esp , if_.esp , PHYS_BASE - if_.esp,true);
+  //hex_dump(if_.esp , if_.esp , PHYS_BASE - if_.esp, true);
   palloc_free_page(fn_modified);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
-
   if (!success) 
     thread_exit ();
-
 
   /* Start the user process by simulating a return from an
      interrupt, implemented by intr_exit (in
@@ -136,11 +131,12 @@ process_wait (tid_t child_tid UNUSED)
     return -1;
   }
 
-  sema_down(&child->sema_exit);
+  sema_down(&(child->sema_parent_wait));
   status = child->exit_status;
   remove_child(child);
+  
+  sema_up(&(child->sema_child_exit));
   return status;
-
 }
 
 /* Free the current process's resources. */
@@ -150,6 +146,13 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  /* modified for lab2_3*/
+  for(int i = 2; i < cur->fd_max; i++) 
+  {
+    close(i);
+  }
+  palloc_free_page(cur->fd_table);
+  
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -274,20 +277,13 @@ load (const char *file_name, void (**eip) (void), void **esp)
   process_activate ();
 
   /* Open executable file. */
-  /* modified for lab2_4 */
-  lock_acquire(&filesys_lock);
   file = filesys_open (file_name);
   if (file == NULL) 
     {
-      lock_release(&filesys_lock);
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
 
-  t->cur_file = file;
-  file_deny_write(file);
-  lock_release(&filesys_lock);
-  
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
@@ -523,7 +519,8 @@ install_page (void *upage, void *kpage, bool writable)
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
 }
 
-/* modified for lab2_1 */
+
+/* modified for lab2_2 */
 void put_argv_stack(char *file_name, void **esp)
 {
   char **argv_list = palloc_get_page(0);
@@ -540,7 +537,8 @@ void put_argv_stack(char *file_name, void **esp)
     argv_list[argv_count] = argv_token;
     argv_count++;
   }
-  
+  argv_list[argv_count] = NULL;
+
   // 1. put arguments to stack
   for (i=argv_count-1; i>=0; i--)
   {
@@ -602,6 +600,5 @@ void remove_child(struct thread* t)
   if(t)
   {
     list_remove(&(t->child_elem));
-    palloc_free_page(t);
   }
 }
