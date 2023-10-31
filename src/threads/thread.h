@@ -4,6 +4,8 @@
 #include <debug.h>
 #include <list.h>
 #include <stdint.h>
+/* modified for lab2_3*/
+#include "threads/synch.h"
 
 /* States in a thread's life cycle. */
 enum thread_status
@@ -65,7 +67,7 @@ typedef int tid_t;
       2. Second, kernel stacks must not be allowed to grow too
          large.  If a stack overflows, it will corrupt the thread
          state.  Thus, kernel functions should not allocate large
-         structures or arrays as non-static local variables.  Usestruct thread
+         structures or arrays as non-static local variables.  Use
          dynamic allocation with malloc() or palloc_get_page()
          instead.
 
@@ -90,26 +92,28 @@ struct thread
     int priority;                       /* Priority. */
     struct list_elem allelem;           /* List element for all threads list. */
 
+
     /* Shared between thread.c and synch.c. */
     struct list_elem elem;              /* List element. */
-    /* modified for lab1_1 */
-    int64_t wakeup_tick;
 
-    /* modified for lab1_2 */
-    int original_priority; // priority before donation
-    struct lock *waiting_lock; // lock that thread is waiting for
-
-    // List of higher priority threads that donated to the thread
-    struct list donation_list; // for multiple donation
-    struct list_elem donation_elem;
-
-    /* modified for lab1_3 */
-    int nice;
-    int recent_cpu;
-    
 #ifdef USERPROG
     /* Owned by userprog/process.c. */
     uint32_t *pagedir;                  /* Page directory. */
+     /* modified for lab2_3 */
+    struct thread *parent;
+    struct list_elem child_elem;
+    struct list child_list;
+    
+    bool isload;
+
+    struct semaphore sema_load;
+    struct semaphore sema_child_exit;
+    struct semaphore sema_parent_wait;
+    
+    int exit_status;
+
+    struct file **fd_table;
+    int fd_max;
 #endif
 
     /* Owned by thread.c. */
@@ -140,11 +144,6 @@ const char *thread_name (void);
 void thread_exit (void) NO_RETURN;
 void thread_yield (void);
 
-/* modified for lab1_1 */
-void thread_sleep(int64_t ticks);
-bool cmp_wakeup_tick(const struct list_elem *prev, const struct list_elem *next, void *aux UNUSED);
-void wake_thread(int64_t ticks);
-
 /* Performs some operation on thread t, given auxiliary data AUX. */
 typedef void thread_action_func (struct thread *t, void *aux);
 void thread_foreach (thread_action_func *, void *);
@@ -158,13 +157,3 @@ int thread_get_recent_cpu (void);
 int thread_get_load_avg (void);
 
 #endif /* threads/thread.h */
-
-/* modified for lab1_2 */
-bool cmp_priority(const struct list_elem *t1, const struct list_elem *t2, void *aux UNUSED);
-void check_priority_and_yield(void);
-
-/* modified for lab1_3 */
-void mlfqs_increment_recent_cpu (struct thread* t);
-void mlfqs_calculate_priority (void);
-void mlfqs_calculate_recent_cpu (void);
-void mlfqs_calculate_load_avg (void);

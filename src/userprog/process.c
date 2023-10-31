@@ -30,7 +30,10 @@ process_execute (const char *file_name)
 {
   char *fn_copy;
   tid_t tid;
-
+  /* modified for lab2_2 */
+  char *fn_modified;
+  char *fn_first_token;
+  char *fn_remain;
   /* Make a copy of FILE_NAME.
      Otherwise there's a race between the caller and load(). */
   fn_copy = palloc_get_page (0);
@@ -38,10 +41,24 @@ process_execute (const char *file_name)
     return TID_ERROR;
   strlcpy (fn_copy, file_name, PGSIZE);
 
+  fn_modified = palloc_get_page (0);
+  if (fn_modified == NULL)
+    return TID_ERROR;
+  strlcpy (fn_modified, file_name, PGSIZE);
+  fn_first_token = strtok_r(fn_modified, " ", &fn_remain);
+
   /* Create a new thread to execute FILE_NAME. */
-  tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  // tid = thread_create (file_name, PRI_DEFAULT, start_process, fn_copy);
+  tid = thread_create (fn_first_token, PRI_DEFAULT, start_process, fn_copy);
+  
   if (tid == TID_ERROR)
+  {
     palloc_free_page (fn_copy); 
+  }
+  
+  /* modified for lab2_2 */
+  palloc_free_page (fn_modified);
+
   return tid;
 }
 
@@ -54,12 +71,31 @@ start_process (void *file_name_)
   struct intr_frame if_;
   bool success;
 
+  /* modified for lab2_2 */
+  char *fn_modified;
+  char *fn_first_token;
+  char *fn_remain;
+
+  fn_modified = palloc_get_page (0);
+  strlcpy (fn_modified, file_name, PGSIZE);
+  fn_first_token = strtok_r(fn_modified, " ", &fn_remain);
+
   /* Initialize interrupt frame and load executable. */
   memset (&if_, 0, sizeof if_);
   if_.gs = if_.fs = if_.es = if_.ds = if_.ss = SEL_UDSEG;
   if_.cs = SEL_UCSEG;
   if_.eflags = FLAG_IF | FLAG_MBS;
-  success = load (file_name, &if_.eip, &if_.esp);
+  //success = load (file_name, &if_.eip, &if_.esp);
+  success = load (fn_first_token, &if_.eip, &if_.esp);
+  
+  if (success)
+  {
+    put_argv_stack(file_name, &if_.esp);
+    thread_current()->isload = true;
+  }
+  sema_up(&thread_current()->sema_load);
+  //hex_dump(if_.esp , if_.esp , PHYS_BASE - if_.esp, true);
+  palloc_free_page(fn_modified);
 
   /* If load failed, quit. */
   palloc_free_page (file_name);
@@ -88,7 +124,19 @@ start_process (void *file_name_)
 int
 process_wait (tid_t child_tid UNUSED) 
 {
-  return -1;
+  int status;
+  struct thread* child = get_child(child_tid);
+  if(!child)
+  {
+    return -1;
+  }
+
+  sema_down(&(child->sema_parent_wait));
+  status = child->exit_status;
+  remove_child(child);
+  
+  sema_up(&(child->sema_child_exit));
+  return status;
 }
 
 /* Free the current process's resources. */
@@ -98,6 +146,13 @@ process_exit (void)
   struct thread *cur = thread_current ();
   uint32_t *pd;
 
+  /* modified for lab2_3*/
+  for(int i = 2; i < cur->fd_max; i++) 
+  {
+    close(i);
+  }
+  palloc_free_page(cur->fd_table);
+  
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -462,4 +517,88 @@ install_page (void *upage, void *kpage, bool writable)
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
           && pagedir_set_page (t->pagedir, upage, kpage, writable));
+}
+
+
+/* modified for lab2_2 */
+void put_argv_stack(char *file_name, void **esp)
+{
+  char **argv_list = palloc_get_page(0);
+  int argv_count = 0;
+  char *argv_token, *fn_remained;
+  int i=0;
+  char **argv_addr = palloc_get_page(0);
+  int argv_len;
+
+  char *fn_modified = palloc_get_page(0);
+  strlcpy(fn_modified, file_name, strlen(file_name)+1);
+  for(argv_token=strtok_r(fn_modified, " ", &fn_remained); argv_token != NULL ; argv_token = strtok_r(NULL, " ", &fn_remained))
+  {
+    argv_list[argv_count] = argv_token;
+    argv_count++;
+  }
+  argv_list[argv_count] = NULL;
+
+  // 1. put arguments to stack
+  for (i=argv_count-1; i>=0; i--)
+  {
+    argv_len = strlen(argv_list[i]);
+    *esp -= argv_len+1;
+    strlcpy(*esp, argv_list[i], argv_len + 1);
+    argv_addr[i] = *esp;
+  }
+
+  // 2. word alignment
+  *esp -= ((uint32_t)*esp) % 4;
+  
+  // 3. put address of arguments to stack
+  *esp -= 4;
+  **(uint32_t **)esp = 0;
+
+  for (i=argv_count-1; i>=0; i--)
+  {
+    *esp -= 4;
+    **(uint32_t **)esp = argv_addr[i];
+  }
+
+  // 4. put start address of argument_list (argv)
+  *esp -= 4;
+  **(uint32_t **)esp = (uint32_t) (*esp + 4);
+
+  // 5. put argc
+  *esp -= 4;
+  **(uint32_t **)esp = argv_count;
+
+  // 6. put return address
+  *esp -= 4;
+  **(uint32_t **)esp = 0;
+
+  palloc_free_page(argv_list);
+  palloc_free_page(argv_addr);
+  palloc_free_page(fn_modified);
+}
+
+/* modified for lab2_3 */
+struct thread* get_child(pid_t pid)
+{
+  struct list_elem *elem;
+  struct thread* t;
+  struct list *child_list = &(thread_current()->child_list);
+
+  for (elem = list_begin(child_list); elem != list_end(child_list) ; elem = list_next(elem))
+  {
+    t = list_entry(elem, struct thread, child_elem);
+    if(t->tid == pid)
+    {
+      return t;
+    }
+  }
+  return NULL;
+}
+void remove_child(struct thread* t)
+{
+  if(t)
+  {
+    list_remove(&(t->child_elem));
+  }
 }
