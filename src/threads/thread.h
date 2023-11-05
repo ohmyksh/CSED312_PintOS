@@ -113,6 +113,7 @@ struct thread
     int exit_status;
 
     struct file **fd_table;
+    struct file* cur_file;
     int fd_max;
 #endif
 

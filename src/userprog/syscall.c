@@ -27,7 +27,8 @@ static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
   is_valid_addr((void *)(f->esp));
-  for (int i = 0; i < 3; i++) 
+  int i;
+  for (i = 0; i < 3; i++) 
     is_valid_addr(f->esp + 4*i);
 
   int argv[3];
@@ -214,9 +215,11 @@ int open (const char *file)
 
  is_valid_addr((void*)file);
 
+ lock_acquire(&filesys_lock);
  f = filesys_open(file);
  if(f==NULL)
  {
+  lock_release(&filesys_lock);
   return -1;
  }
 
@@ -233,6 +236,7 @@ int open (const char *file)
  cur->fd_table[fd] = f;
  cur->fd_max++;
 
+ lock_release(&filesys_lock);
  return fd;
 }
 
@@ -240,11 +244,14 @@ int filesize (int fd)
 {
   /* Returns the size, in bytes, of the file open as fd. */
   struct file* f;
+  lock_acquire(&filesys_lock);
   f = process_get_file(fd);
   if(f)
   {
+    lock_release(&filesys_lock);
     return file_length(f);
   }
+  lock_release(&filesys_lock);
   return -1;
 }
 
@@ -267,10 +274,11 @@ int read (int fd, void *buffer, unsigned size)
   Fd 0 reads from the keyboard using input_getc(). */
   int bytes_read=0;
   struct file *f;
+  
   unsigned i;
   for (i = 0; i < size; i++)
     is_valid_addr(buffer+i);
-
+  
   if(fd==0)
   {
     for (i = 0; i < size;i++)
@@ -347,9 +355,11 @@ void seek (int fd, unsigned position)
   (However, in Pintos files have a fixed length until project 4 is complete, so writes past end of file will return an error.)
   These semantics are implemented in the file system and do not require any special effort in system call implementation.
   */
+  lock_acquire(&filesys_lock);
   struct file* f = process_get_file(fd);
   ASSERT(f != NULL);
   file_seek(f, position);
+  lock_release(&filesys_lock);
 }
 
 unsigned tell (int fd)
