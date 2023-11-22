@@ -160,7 +160,14 @@ process_exit (void)
   }
   palloc_free_page(cur->fd_table);
   
+
+  // modified for lab3
+  for (i = 1 ; i<cur->mmap_next ;i++)
+    munmap(i);
+  vm_destroy(&cur->vm);
+
   file_close(cur->cur_file);
+
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -543,7 +550,6 @@ static bool
 install_page (void *upage, void *kpage, bool writable)
 {
   struct thread *t = thread_current ();
-
   /* Verify that there's not already a page at that virtual
      address, then map our page there. */
   return (pagedir_get_page (t->pagedir, upage) == NULL
@@ -645,7 +651,6 @@ bool handle_fault(struct vm_entry *vme)
   // 3. vme의 type에 따라 switch문으로 알맞게 처리
   switch(vme->type)
   {
-    // VM_BIN에 대해서만 구현하고, 다른 type에 정확한 동작은 mmap file, swap에서 추후 고려한다.
 	  // VM_BIN일 경우 load_file 함수를 호출하여 physical mem에 load한다. 
     case VM_BIN:
     case VM_FILE:
@@ -660,14 +665,11 @@ bool handle_fault(struct vm_entry *vme)
       //swap_in(vme->swap_slot, kernel_frame->page_addr);
       break;
   }
-  // 4. phys-virtual mem의 mapping 설정
-	// 이때 install_page를 이용
   if (!install_page(vme->vaddr, frame->page_addr, vme->writable))
   {
     free_frame(frame->page_addr);
     return false;
   }
-	// mapping fail하면 page free, return false
 
   // 5. 다 끝나면 vme의 is_loaded를 true로 만들고 return true
   vme->is_loaded = true;

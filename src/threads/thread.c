@@ -216,6 +216,7 @@ thread_create (const char *name, int priority,
       return TID_ERROR;
     }
     t->fd_max = 2;
+
   #endif
 
   /* Add to run queue. */
@@ -503,6 +504,10 @@ init_thread (struct thread *t, const char *name, int priority)
 
   /* modified for lab2_3*/
   list_init(&(t->child_list));
+
+  // modified for lab3
+  list_init(&(t->mmap_list));
+  t->mmap_next = 1;
 }
 
 /* Allocates a SIZE-byte frame at the top of thread T's stack and

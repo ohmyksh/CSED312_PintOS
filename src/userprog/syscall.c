@@ -89,6 +89,14 @@ syscall_handler (struct intr_frame *f UNUSED)
       get_argument(f->esp+4, argv, 1);
       close((int)argv[0]);
       break;
+    case SYS_MMAP:
+      get_argument(f->esp+4, argv, 2);
+      f->eax = mmap(argv[0], (void *)argv[1]);
+      break;
+    case SYS_MUNMAP:
+      get_argument(f->esp+4, argv, 1);
+      munmap(argv[0]);
+      break;
     default:
       exit(-1);
   }
@@ -397,4 +405,99 @@ void close (int fd)
       thread_current()->fd_table[fd] = NULL;
     }
   }
+}
+
+
+// modified for lab3
+mapid_t mmap(int fd, void* addr)
+{
+  if(is_kernel_vaddr(addr))
+    exit(-1);
+  // addr이 0인 경우, addr이 page 정렬되지 않은 경우
+  if(!addr || pg_ofs(addr) != 0 || (int)addr%PGSIZE !=0)
+    return -1;
+
+  // for vm_entry
+  int file_remained;
+  size_t offset = 0;
+
+  // 1. mmap_file 구조체 생성 및 메모리 할당
+	struct mmap_file *mfe = (struct mmap_file *)malloc(sizeof(struct mmap_file));
+  if (!mfe) return -1;   
+	memset(mfe, 0, sizeof(struct mmap_file));
+
+	// 2. file open
+  lock_acquire(&filesys_lock);
+  struct file* file = file_reopen(process_get_file(fd));
+  file_remained = file_length(file);
+  // fd로 열린 파일의 길이가 0바이트인 경우
+  if (!file_remained) return -1;
+	lock_release(&filesys_lock);
+
+	// 3. vm_entry 할당
+	list_init(&mfe->vme_list);	
+  
+	while(file_remained > 0)// file 다 읽을 때 까지 반복
+	{
+		// vm entry 할당
+    if (vme_find(addr)) return -1;
+
+    size_t page_read_bytes = file_remained < PGSIZE ? file_remained : PGSIZE;
+    size_t page_zero_bytes = PGSIZE - page_read_bytes;
+
+    struct vm_entry* vme = vme_construct(VM_FILE, addr, true, false, file, offset, page_read_bytes, page_zero_bytes);
+    if (!vme) 
+      return false;
+
+		// 2. vme_list에 mmap_elem과 연결된 vm entry 추가
+    list_push_back(&mfe->vme_list, &vme->mmap_elem);
+		// 3. current thread에 대해 vme insert
+    vme_insert(&thread_current()->vm, vme);
+		
+    // 4. file addr, offset 업데이트 (page size만큼)
+    addr += PGSIZE;
+    offset += PGSIZE;
+		// 5. file에 남은 길이 업데이트 (page size만큼)
+    file_remained -= PGSIZE;
+	}
+
+  // 4. mmap_list, mmap_next 관리
+  mfe->mapid = thread_current()->mmap_next++;
+  list_push_back(&thread_current()->mmap_list, &mfe->elem);
+  mfe->file = file;
+	return mfe->mapid;
+}
+
+
+void munmap(mapid_t mapid)
+{
+  // 1. thread의 mmap_list에서 mapid에 해당하는 mfe 찾기
+	struct mmap_file *mfe = NULL;
+  struct list_elem *e;
+  for (e = list_begin(&thread_current()->mmap_list); e != list_end(&thread_current()->mmap_list); e = list_next(e))
+  {
+    mfe = list_entry (e, struct mmap_file, elem);
+    if (mfe->mapid == mapid) break;
+  }
+  if(mfe == NULL) return;
+
+	// 2. 해당 mfe의 vme_list를 돌면서 vme를 지우기
+	for (e = list_begin(&mfe->vme_list); e != list_end(&mfe->vme_list);)
+  {
+    struct vm_entry *vme = list_entry(e, struct vm_entry, mmap_elem);
+    if(vme->is_loaded && pagedir_is_dirty(thread_current()->pagedir, vme->vaddr))
+    {
+      lock_acquire(&filesys_lock);
+      file_write_at(vme->file, vme->vaddr, vme->read_bytes, vme->offset);
+      lock_release(&filesys_lock);
+      free_frame(pagedir_get_page(thread_current()->pagedir, vme->vaddr));
+    }
+    vme->is_loaded = false;
+    e = list_remove(e);
+    vme_delete(&thread_current()->vm, vme);
+  }
+	// 4. mfe를 mmap_list에서 제거
+  list_remove(&mfe->elem);
+  // 5. mfe 구조체 자체를 free
+  free(mfe); 
 }

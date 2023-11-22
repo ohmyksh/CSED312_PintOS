@@ -25,12 +25,12 @@ struct vm_entry
     size_t swap_slot;
 };
 
-// struct mmap_file {
-//   mapid_t mapid;        
-//   struct file* file;     
-//   struct list_elem elem; 
-//   struct list vme_list;  
-// };
+struct mmap_file {
+  mapid_t mapid;        
+  struct file* file;     
+  struct list_elem elem; 
+  struct list vme_list;  
+};
 
 void vm_init (struct hash *vm);
 

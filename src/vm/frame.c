@@ -44,9 +44,6 @@ struct frame* frame_find(void* addr)
 
 struct frame* alloc_frame(enum palloc_flags flags)
 {
-	if((flags & PAL_USER) == 0)
-		return NULL;
-
     struct frame *frame; 
     frame = (struct frame *)malloc(sizeof(struct frame));
     if (!frame) return NULL;

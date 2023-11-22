@@ -115,7 +115,10 @@ main (void)
   exception_init ();
   syscall_init ();
 #endif
+  // modified for lab3
   frame_table_init();
+  
+
   /* Start thread scheduler and enable interrupts. */
   thread_start ();
   serial_init_queue ();

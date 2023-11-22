@@ -119,9 +119,8 @@ struct thread
     // modified for lab3
     struct hash vm;     
     void* esp;
-    
-     struct list mmap_list;
-   int mmap_nxt;
+    struct list mmap_list;
+    int mmap_next;
 #endif
 
     /* Owned by thread.c. */
