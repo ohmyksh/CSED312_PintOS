@@ -12,6 +12,8 @@
 #include "userprog/process.h"
 #include <string.h>
 
+#include "vm/page.h"
+
 static void syscall_handler (struct intr_frame *);
 struct lock filesys_lock;
 
@@ -26,6 +28,8 @@ syscall_init (void)
 static void
 syscall_handler (struct intr_frame *f UNUSED) 
 {
+  thread_current()->esp = f->esp;
+  
   is_valid_addr((void *)(f->esp));
   int i;
   for (i = 0; i < 3; i++) 
@@ -93,7 +97,9 @@ syscall_handler (struct intr_frame *f UNUSED)
 /* modified for lab2_2 */
 void is_valid_addr(void *addr)
 {
-  if (!addr || !is_user_vaddr(addr) || !pagedir_get_page(thread_current()->pagedir, addr)) 
+  // if (!addr || !is_user_vaddr(addr) || !pagedir_get_page(thread_current()->pagedir, addr)) 
+  //   exit(-1);
+  if (!addr || !is_user_vaddr(addr)) 
     exit(-1);
 }
 
@@ -195,6 +201,7 @@ bool remove(const char* file)
   A file may be removed regardless of whether it is open or closed, 
   and removing an open file does not close it.
   */
+  is_valid_addr((void*)file);
   return filesys_remove(file);
 }
 

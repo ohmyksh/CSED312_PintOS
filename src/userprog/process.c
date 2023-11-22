@@ -463,26 +463,28 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_read_bytes = read_bytes < PGSIZE ? read_bytes : PGSIZE;
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
-      /* Get a page of memory. */
-      //uint8_t *kpage = palloc_get_page (PAL_USER);
-      struct frame* frame = alloc_frame(PAL_USER);
-      if (frame->page_addr == NULL)
-        return false;
+      // modified for lab3 
 
-      /* Load this page. */
-      if (file_read (file, frame->page_addr, page_read_bytes) != (int) page_read_bytes)
-        {
-          free_frame(frame->page_addr);
-          return false; 
-        }
-      memset (frame->page_addr + page_read_bytes, 0, page_zero_bytes);
+      // /* Get a page of memory. */
+      // //uint8_t *kpage = palloc_get_page (PAL_USER);
+      // struct frame* frame = alloc_frame(PAL_USER);
+      // if (frame->page_addr == NULL)
+      //   return false;
 
-      /* Add the page to the process's address space. */
-      if (!install_page (upage, frame->page_addr, writable)) 
-        {
-          free_frame(frame->page_addr);
-          return false; 
-        }
+      // /* Load this page. */
+      // if (file_read (file, frame->page_addr, page_read_bytes) != (int) page_read_bytes)
+      //   {
+      //     free_frame(frame->page_addr);
+      //     return false; 
+      //   }
+      // memset (frame->page_addr + page_read_bytes, 0, page_zero_bytes);
+
+      // /* Add the page to the process's address space. */
+      // if (!install_page (upage, frame->page_addr, writable)) 
+      //   {
+      //     free_frame(frame->page_addr);
+      //     return false; 
+      //   }
 
       struct vm_entry *vme = vme_construct(VM_BIN, upage, writable, false, file, ofs, page_read_bytes, page_zero_bytes);
       if (!vme)
@@ -492,6 +494,7 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
+      ofs += page_read_bytes;
       upage += PGSIZE;
     }
   return true;
@@ -629,4 +632,77 @@ void remove_child(struct thread* t)
   {
     list_remove(&(t->child_elem));
   }
+}
+
+// modified for lab3
+bool handle_fault(struct vm_entry *vme)
+{
+  bool success = false;
+  // 1. 물리 메모리 페이지를 할당 받음
+  // 이때 PAL_USER flag를 사용해서 user pool에 할당
+  struct frame* frame = alloc_frame (PAL_USER);
+  frame->vme = vme;
+  // 3. vme의 type에 따라 switch문으로 알맞게 처리
+  switch(vme->type)
+  {
+    // VM_BIN에 대해서만 구현하고, 다른 type에 정확한 동작은 mmap file, swap에서 추후 고려한다.
+	  // VM_BIN일 경우 load_file 함수를 호출하여 physical mem에 load한다. 
+    case VM_BIN:
+    case VM_FILE:
+      success = load_file(frame->page_addr, vme);
+      if (!success)
+      {
+        free_frame(frame->page_addr);
+        return false;
+      }
+      break;
+    case VM_ANON:
+      //swap_in(vme->swap_slot, kernel_frame->page_addr);
+      break;
+  }
+  // 4. phys-virtual mem의 mapping 설정
+	// 이때 install_page를 이용
+  if (!install_page(vme->vaddr, frame->page_addr, vme->writable))
+  {
+    free_frame(frame->page_addr);
+    return false;
+  }
+	// mapping fail하면 page free, return false
+
+  // 5. 다 끝나면 vme의 is_loaded를 true로 만들고 return true
+  vme->is_loaded = true;
+  return true;
+}
+
+
+bool expand_stack(void *addr)
+{
+  struct frame *frame;
+	void *upage = pg_round_down(addr);
+  bool success = false;
+	
+	// 1. user mode용 frame 할당하고 0으로 초기화
+	frame = alloc_frame(PAL_USER | PAL_ZERO);
+	if (frame)
+  {
+    // 2. 할당된 kernel frame을 upage에 mapping
+    success = install_page(upage, frame->page_addr, true);
+    if (!success)
+    {
+      free_frame(frame->page_addr); // page 할당 해제
+      return success;
+    }
+    else
+    {
+      // 3. 해당하는 vm entry 생성
+      frame->vme = vme_construct(VM_ANON, upage, true, true, NULL, NULL, 0, 0);
+      if (!frame->vme)
+        return false;
+      // 3. vme_insert()로 생성한 vm_entry를 추가
+      vme_insert(&thread_current()->vm, frame->vme);
+      return success;
+    }
+  }
+	else
+    return success;
 }

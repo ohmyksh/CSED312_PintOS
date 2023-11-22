@@ -115,8 +115,11 @@ struct thread
     struct file **fd_table;
     struct file* cur_file;
     int fd_max;
-    struct hash vm;     
 
+    // modified for lab3
+    struct hash vm;     
+    void* esp;
+    
      struct list mmap_list;
    int mmap_nxt;
 #endif
