@@ -19,6 +19,8 @@
 #include "threads/thread.h"
 #include "threads/vaddr.h"
 
+#include "vm/frame.h"
+#include "vm/page.h"
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 extern struct lock filesys_lock;
@@ -77,6 +79,8 @@ start_process (void *file_name_)
   char *fn_modified;
   char *fn_first_token;
   char *fn_remain;
+
+  vm_init(&thread_current()->vm);
 
   fn_modified = palloc_get_page (0);
   strlcpy (fn_modified, file_name, PGSIZE);
@@ -460,25 +464,31 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       size_t page_zero_bytes = PGSIZE - page_read_bytes;
 
       /* Get a page of memory. */
-      uint8_t *kpage = palloc_get_page (PAL_USER);
-      if (kpage == NULL)
+      //uint8_t *kpage = palloc_get_page (PAL_USER);
+      struct frame* frame = alloc_frame(PAL_USER);
+      if (frame->page_addr == NULL)
         return false;
 
       /* Load this page. */
-      if (file_read (file, kpage, page_read_bytes) != (int) page_read_bytes)
+      if (file_read (file, frame->page_addr, page_read_bytes) != (int) page_read_bytes)
         {
-          palloc_free_page (kpage);
+          free_frame(frame->page_addr);
           return false; 
         }
-      memset (kpage + page_read_bytes, 0, page_zero_bytes);
+      memset (frame->page_addr + page_read_bytes, 0, page_zero_bytes);
 
       /* Add the page to the process's address space. */
-      if (!install_page (upage, kpage, writable)) 
+      if (!install_page (upage, frame->page_addr, writable)) 
         {
-          palloc_free_page (kpage);
+          free_frame(frame->page_addr);
           return false; 
         }
 
+      struct vm_entry *vme = vme_construct(VM_BIN, upage, writable, false, file, ofs, page_read_bytes, page_zero_bytes);
+      if (!vme)
+        return false;
+      // 3. vme_insert()로 생성한 vm_entry를 추가
+      vme_insert(&thread_current()->vm, vme);
       /* Advance. */
       read_bytes -= page_read_bytes;
       zero_bytes -= page_zero_bytes;
@@ -493,16 +503,26 @@ static bool
 setup_stack (void **esp) 
 {
   uint8_t *kpage;
+  struct frame* frame;
   bool success = false;
 
-  kpage = palloc_get_page (PAL_USER | PAL_ZERO);
-  if (kpage != NULL) 
+  frame = alloc_frame(PAL_USER | PAL_ZERO);
+  //kpage = palloc_get_page (PAL_USER | PAL_ZERO);
+  
+  if (frame->page_addr != NULL) 
     {
-      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, kpage, true);
+      success = install_page (((uint8_t *) PHYS_BASE) - PGSIZE, frame->page_addr, true);
       if (success)
-        *esp = PHYS_BASE;
+        {
+          frame->vme = vme_construct(VM_ANON, ((uint8_t *)PHYS_BASE) - PGSIZE, true, true, NULL, NULL, 0, 0);
+          if (!frame->vme)
+            return false;
+          // 3. vme_insert()로 생성한 vm_entry를 추가
+          vme_insert(&thread_current()->vm, frame->vme);
+          *esp = PHYS_BASE;
+      } 
       else
-        palloc_free_page (kpage);
+        free_frame (frame->page_addr);
     }
   return success;
 }

@@ -38,6 +38,7 @@
 #include "filesys/fsutil.h"
 #endif
 
+#include "vm/frame.h"
 /* Page directory with kernel mappings only. */
 uint32_t *init_page_dir;
 
@@ -114,7 +115,7 @@ main (void)
   exception_init ();
   syscall_init ();
 #endif
-
+  frame_table_init();
   /* Start thread scheduler and enable interrupts. */
   thread_start ();
   serial_init_queue ();

@@ -6,7 +6,7 @@
 #include <stdint.h>
 /* modified for lab2_3*/
 #include "threads/synch.h"
-
+#include "lib/kernel/hash.h"
 /* States in a thread's life cycle. */
 enum thread_status
   {
@@ -115,6 +115,10 @@ struct thread
     struct file **fd_table;
     struct file* cur_file;
     int fd_max;
+    struct hash vm;     
+
+     struct list mmap_list;
+   int mmap_nxt;
 #endif
 
     /* Owned by thread.c. */
