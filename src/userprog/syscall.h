@@ -12,7 +12,7 @@ struct file *process_get_file(int fd);
 void halt(void);
 void exit(int status);
 
-pid_t exec (const char *cmd_line);
+pid_t exec (const char *cmd_line, void* esp);
 int wait (pid_t pid);
 
 /* file */

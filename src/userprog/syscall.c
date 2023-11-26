@@ -49,7 +49,7 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_EXEC:
       get_argument(f->esp+4, argv, 1);
-      f->eax = exec((const char*)argv[0]);
+      f->eax = exec((const char*)argv[0], f->esp);
       break;
     case SYS_WAIT:
       get_argument(f->esp+4, argv, 1);
@@ -145,7 +145,7 @@ void exit(int status)
 }
 
 
-pid_t exec (const char *cmd_line)
+pid_t exec (const char *cmd_line, void* esp)
 {
   char *ptr = cmd_line;
   struct thread* child;
@@ -161,6 +161,44 @@ pid_t exec (const char *cmd_line)
     ptr++;
   }
   
+  // pinning
+  size_t remained = strlen(cmd_line)+1;
+  void *buffer_temp = (void*)cmd_line;
+  while(remained > 0)
+  {
+    // size_t ofs = buffer_temp - pg_round_down(buffer_temp);
+    struct vm_entry* vme = vme_find(pg_round_down(buffer_temp));
+    if(vme)
+    {
+      if(!vme->is_loaded)
+      {
+        if (!handle_fault(vme))
+        {
+          exit(-1);
+        }
+      }
+    }
+    else
+    {
+      uint32_t base = 0xC0000000;
+      uint32_t limit = 0x800000;
+      uint32_t lowest_stack_addr = base-limit;
+      if ( (buffer_temp >= (esp-32)) && (buffer_temp >= lowest_stack_addr))
+      {
+        if (!expand_stack(buffer_temp))
+        {
+          exit(-1);
+        }
+      }
+    }
+    
+    size_t read_bt = remained > PGSIZE - pg_ofs(buffer_temp) ? PGSIZE - pg_ofs(buffer_temp) : remained;
+    struct frame* frame_to_pin = find_frame_for_vaddr(pg_round_down(buffer_temp));
+    frame_pin(frame_to_pin->page_addr);
+    remained -= read_bt;
+    buffer_temp += read_bt;
+  }
+
   // 2. create child process
   pid = process_execute(cmd_line);
   if(pid == -1)
@@ -173,6 +211,19 @@ pid_t exec (const char *cmd_line)
 
   // 4. wait until child process is loaded
   sema_down(&(child->sema_load));
+
+  remained = strlen(cmd_line)+1;
+  buffer_temp = (void*)cmd_line;
+  while(remained > 0)
+  {
+    // size_t ofs = buffer_temp - pg_round_down(buffer_temp);
+    size_t read_bt = remained > PGSIZE - pg_ofs(buffer_temp) ? PGSIZE - pg_ofs(buffer_temp) : remained;
+    struct frame* frame_to_pin = find_frame_for_vaddr(pg_round_down(buffer_temp));
+    frame_unpin(frame_to_pin->page_addr);
+
+    remained -= read_bt;
+    buffer_temp += read_bt;
+  }
 
   // 5. return
   if(child->isload)

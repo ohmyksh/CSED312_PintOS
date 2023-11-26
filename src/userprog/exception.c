@@ -173,6 +173,7 @@ page_fault (struct intr_frame *f)
       uint32_t limit = 0x800000;
       uint32_t lowest_stack_addr = base-limit;
       if ( (fault_addr >= (esp-32)) && (fault_addr >= lowest_stack_addr))
+      {
          if (!expand_stack(fault_addr))
          {
             exit(-1);
@@ -181,6 +182,7 @@ page_fault (struct intr_frame *f)
          {
             return;
          }
+      }
       else
          exit(-1);
    }
