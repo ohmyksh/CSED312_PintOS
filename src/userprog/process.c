@@ -21,9 +21,11 @@
 
 #include "vm/frame.h"
 #include "vm/page.h"
+#include "vm/swap.h"
 static thread_func start_process NO_RETURN;
 static bool load (const char *cmdline, void (**eip) (void), void **esp);
 extern struct lock filesys_lock;
+extern struct lock frame_lock;
 
 /* Starts a new thread running a user program loaded from
    FILENAME.  The new thread may be scheduled (and may even exit)
@@ -158,16 +160,15 @@ process_exit (void)
   {
     close(i);
   }
+
   palloc_free_page(cur->fd_table);
-  
+  file_close(cur->cur_file);
 
   // modified for lab3
   for (i = 1 ; i<cur->mmap_next ;i++)
     munmap(i);
+
   vm_destroy(&cur->vm);
-
-  file_close(cur->cur_file);
-
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
   pd = cur->pagedir;
@@ -182,6 +183,7 @@ process_exit (void)
          that's been freed (and cleared). */
       cur->pagedir = NULL;
       pagedir_activate (NULL);
+      delete_all_frame(thread_current());
       pagedir_destroy (pd);
     }
 }
@@ -285,24 +287,24 @@ load (const char *file_name, void (**eip) (void), void **esp)
   bool success = false;
   int i;
 
+  lock_acquire(&filesys_lock);
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
 
-  lock_acquire(&filesys_lock);
+
   /* Open executable file. */
   file = filesys_open (file_name);
   if (file == NULL) 
     {
-      lock_release(&filesys_lock);
       printf ("load: %s: open failed\n", file_name);
       goto done; 
     }
   t->cur_file = file;
   file_deny_write(file);
-  lock_release(&filesys_lock);
+  
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
@@ -387,6 +389,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   //file_close (file);
+  lock_release(&filesys_lock);
   return success;
 }
 
@@ -532,7 +535,10 @@ setup_stack (void **esp)
           *esp = PHYS_BASE;
       } 
       else
+      {
         free_frame (frame->page_addr);
+      }
+        
     }
   return success;
 }
@@ -653,6 +659,13 @@ bool handle_fault(struct vm_entry *vme)
   {
 	  // VM_BIN일 경우 load_file 함수를 호출하여 physical mem에 load한다. 
     case VM_BIN:
+      success = load_file(frame->page_addr, vme);
+      if (!success)
+      {
+        free_frame(frame->page_addr);
+        return false;
+      }
+      break;
     case VM_FILE:
       success = load_file(frame->page_addr, vme);
       if (!success)
@@ -662,7 +675,7 @@ bool handle_fault(struct vm_entry *vme)
       }
       break;
     case VM_ANON:
-      //swap_in(vme->swap_slot, kernel_frame->page_addr);
+      swap_in(vme->swap_slot, frame->page_addr);
       break;
   }
   if (!install_page(vme->vaddr, frame->page_addr, vme->writable))

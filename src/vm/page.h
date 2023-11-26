@@ -1,5 +1,5 @@
-#ifndef PAGE_H
-#define PAGE_H
+#ifndef VM_PAGE_H
+#define VM_PAGE_H
 
 #define VM_BIN 0
 #define VM_FILE 1

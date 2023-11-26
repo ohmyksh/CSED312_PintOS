@@ -13,9 +13,11 @@
 #include <string.h>
 
 #include "vm/page.h"
+#include "vm/frame.h"
 
 static void syscall_handler (struct intr_frame *);
 struct lock filesys_lock;
+extern struct lock frame_lock;
 
 void
 syscall_init (void) 
@@ -71,11 +73,11 @@ syscall_handler (struct intr_frame *f UNUSED)
       break;
     case SYS_READ:
       get_argument(f->esp+4, argv, 3);
-      f->eax = read((int)argv[0], (void *)argv[1], (unsigned)argv[2]);
+      f->eax = read((int)argv[0], (void *)argv[1], (unsigned)argv[2], f->esp);
       break;
     case SYS_WRITE:
       get_argument(f->esp+4, argv, 3);
-      f->eax = write((int)argv[0], (const void *)argv[1], (unsigned)argv[2]);
+      f->eax = write((int)argv[0], (const void *)argv[1], (unsigned)argv[2], f->esp);
       break;
     case SYS_SEEK:
       get_argument(f->esp+4, argv, 2);
@@ -198,7 +200,10 @@ bool create(const char* file, unsigned initial_size)
   {
     exit(-1);
   }
-  return filesys_create(file, initial_size);
+  lock_acquire(&filesys_lock);
+  bool success = filesys_create(file, initial_size);
+  lock_release(&filesys_lock);
+  return success;
 }
 
 bool remove(const char* file)
@@ -282,7 +287,7 @@ struct file *process_get_file(int fd)
   return NULL; 
 }
 
-int read (int fd, void *buffer, unsigned size)
+int read (int fd, void *buffer, unsigned size, void* esp)
 {
  /* Reads size bytes from the file open as fd into buffer. 
   Returns the number of bytes actually read (0 at end of file), or -1 if the file could not be read (due to a condition other than end of file).
@@ -294,6 +299,43 @@ int read (int fd, void *buffer, unsigned size)
   for (i = 0; i < size; i++)
     is_valid_addr(buffer+i);
   
+  // pinning
+  size_t remained = size;
+  void *buffer_temp = (void*)buffer;
+  while(remained > 0)
+  {
+    // size_t ofs = buffer_temp - pg_round_down(buffer_temp);
+    struct vm_entry* vme = vme_find(pg_round_down(buffer_temp));
+    if(vme)
+    {
+      if(!vme->is_loaded)
+      {
+        if (!handle_fault(vme))
+        {
+          exit(-1);
+        }
+      }
+    }
+    else
+    {
+      uint32_t base = 0xC0000000;
+      uint32_t limit = 0x800000;
+      uint32_t lowest_stack_addr = base-limit;
+      if ( (buffer_temp >= (esp-32)) && (buffer_temp >= lowest_stack_addr))
+      {
+        if (!expand_stack(buffer_temp))
+        {
+          exit(-1);
+        }
+      }
+    }
+    
+    size_t read_bt = remained > PGSIZE - pg_ofs(buffer_temp) ? PGSIZE - pg_ofs(buffer_temp) : remained;
+    struct frame* frame_to_pin = find_frame_for_vaddr(pg_round_down(buffer_temp));
+    frame_pin(frame_to_pin->page_addr);
+    remained -= read_bt;
+    buffer_temp += read_bt;
+  }
   if(fd==0)
   {
     for (i = 0; i < size;i++)
@@ -313,14 +355,28 @@ int read (int fd, void *buffer, unsigned size)
     {
       return -1;
     }
+    // read
     lock_acquire(&filesys_lock);
-    bytes_read = file_read(f, buffer, size);
+    bytes_read += file_read(f, buffer, size);
     lock_release(&filesys_lock);
+  }
+
+  remained = size;
+  buffer_temp = (void*)buffer;
+  while(remained > 0)
+  {
+    // size_t ofs = buffer_temp - pg_round_down(buffer_temp);
+    size_t read_bt = remained > PGSIZE - pg_ofs(buffer_temp) ? PGSIZE - pg_ofs(buffer_temp) : remained;
+    struct frame* frame_to_pin = find_frame_for_vaddr(pg_round_down(buffer_temp));
+    frame_unpin(frame_to_pin->page_addr);
+
+    remained -= read_bt;
+    buffer_temp += read_bt;
   }
   return bytes_read;
 }
 
-int write (int fd, const void *buffer, unsigned size)
+int write (int fd, const void *buffer, unsigned size, void *esp)
 {
   /* Writes size bytes from buffer to the open file fd.
   Returns the number of bytes actually written, which may be less than size if some bytes could not be written.
@@ -336,13 +392,51 @@ int write (int fd, const void *buffer, unsigned size)
  unsigned i;
   for (i = 0; i < size; i++)
     is_valid_addr(buffer+i);
+  
+  // pinning
+  size_t remained = size;
+  void *buffer_temp = (void*)buffer;
+  while(remained > 0)
+  {
+    // size_t ofs = buffer_temp - pg_round_down(buffer_temp);
+    struct vm_entry* vme = vme_find(pg_round_down(buffer_temp));
+    if(vme)
+    {
+      if(!vme->is_loaded)
+      {
+        if (!handle_fault(vme))
+        {
+          exit(-1);
+        }
+      }
+    }
+    else
+    {
+      uint32_t base = 0xC0000000;
+      uint32_t limit = 0x800000;
+      uint32_t lowest_stack_addr = base-limit;
+      if ( (buffer_temp >= (esp-32)) && (buffer_temp >= lowest_stack_addr))
+      {
+        if (!expand_stack(buffer_temp))
+        {
+          exit(-1);
+        }
+      }
+    }
+    
+    size_t write_bt = remained > PGSIZE - pg_ofs(buffer_temp) ? PGSIZE - pg_ofs(buffer_temp) : remained;
+    struct frame* frame_to_pin = find_frame_for_vaddr(pg_round_down(buffer_temp));
+    frame_pin(frame_to_pin->page_addr);
+    remained -= write_bt;
+    buffer_temp += write_bt;
+  }
 
  if(fd == 1)
  {
   lock_acquire(&filesys_lock);
   putbuf(buffer, size);
   lock_release(&filesys_lock);
-  return size;
+  bytes_write = size;
  }
  else if(fd > 1)
  {
@@ -352,9 +446,23 @@ int write (int fd, const void *buffer, unsigned size)
       return -1;
     }
     lock_acquire(&filesys_lock);
-    bytes_write = file_write(f, buffer, size);
+    bytes_write += file_write(f, buffer, size);
     lock_release(&filesys_lock);
  }
+ 
+ remained = size;
+ buffer_temp = (void*)buffer;
+ while(remained > 0)
+  {
+    // size_t ofs = buffer_temp - pg_round_down(buffer_temp);
+    size_t write_bt = remained > PGSIZE - pg_ofs(buffer_temp) ? PGSIZE - pg_ofs(buffer_temp) : remained;
+    struct frame* frame_to_pin = find_frame_for_vaddr(pg_round_down(buffer_temp));
+    frame_unpin(frame_to_pin->page_addr);
+
+    remained -= write_bt;
+    buffer_temp += write_bt;
+  }
+
  return bytes_write;
 
 }
@@ -381,13 +489,16 @@ unsigned tell (int fd)
 {
   /* Returns the position of the next byte to be read or written in open file fd, expressed
   in bytes from the beginning of the file. */
+  lock_acquire(&filesys_lock);
   struct file *f = process_get_file(fd);
   if (f)
   {
+    lock_release(&filesys_lock);
     return file_tell(f);
   }
   else
   {
+    lock_release(&filesys_lock);
     return -1;
   }
 }
@@ -430,9 +541,13 @@ mapid_t mmap(int fd, void* addr)
   lock_acquire(&filesys_lock);
   struct file* file = file_reopen(process_get_file(fd));
   file_remained = file_length(file);
+  lock_release(&filesys_lock);
   // fd로 열린 파일의 길이가 0바이트인 경우
-  if (!file_remained) return -1;
-	lock_release(&filesys_lock);
+  if (!file_remained) 
+  {
+    return -1;
+  }
+
 
 	// 3. vm_entry 할당
 	list_init(&mfe->vme_list);	
@@ -485,7 +600,7 @@ void munmap(mapid_t mapid)
 	for (e = list_begin(&mfe->vme_list); e != list_end(&mfe->vme_list);)
   {
     struct vm_entry *vme = list_entry(e, struct vm_entry, mmap_elem);
-    if(vme->is_loaded && pagedir_is_dirty(thread_current()->pagedir, vme->vaddr))
+    if(vme->is_loaded && (pagedir_is_dirty(thread_current()->pagedir, vme->vaddr)))
     {
       lock_acquire(&filesys_lock);
       file_write_at(vme->file, vme->vaddr, vme->read_bytes, vme->offset);

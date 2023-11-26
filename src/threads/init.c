@@ -39,6 +39,7 @@
 #endif
 
 #include "vm/frame.h"
+#include "vm/swap.h"
 /* Page directory with kernel mappings only. */
 uint32_t *init_page_dir;
 
@@ -99,7 +100,8 @@ main (void)
   palloc_init (user_page_limit);
   malloc_init ();
   paging_init ();
-
+  // modified for lab3
+  frame_table_init();
   /* Segmentation. */
 #ifdef USERPROG
   tss_init ();
@@ -115,9 +117,6 @@ main (void)
   exception_init ();
   syscall_init ();
 #endif
-  // modified for lab3
-  frame_table_init();
-  
 
   /* Start thread scheduler and enable interrupts. */
   thread_start ();
@@ -129,8 +128,10 @@ main (void)
   ide_init ();
   locate_block_devices ();
   filesys_init (format_filesys);
+#ifdef VM
+  swap_init();
 #endif
-
+#endif
   printf ("Boot complete.\n");
   
   /* Run actions specified on kernel command line. */

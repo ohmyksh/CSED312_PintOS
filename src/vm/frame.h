@@ -1,5 +1,5 @@
-#ifndef FRAME_H
-#define FRAME_H
+#ifndef VM_FRAME_H
+#define VM_FRAME_H
 
 #include <list.h>
 #include "vm/page.h"
@@ -15,6 +15,7 @@ struct frame
 	struct vm_entry *vme;
 	struct thread *thread;
 	struct list_elem ft_elem; 
+	bool pinned;
 };
 
 struct list frame_table;
@@ -26,6 +27,15 @@ void frame_insert(struct frame *frame);
 void frame_delete(struct frame *frame);
 struct frame* alloc_frame(enum palloc_flags flags);
 struct frame* frame_find(void* addr);
+struct frame* find_frame_for_vaddr(void* vaddr);
 void free_frame(void *addr);
 
+
+void evict_frame(void);
+struct frame* find_victim(void);
+
+void frame_pin(void *kaddr);
+void frame_unpin(void *kaddr);
+
+void delete_all_frame(struct thread* t);
 #endif

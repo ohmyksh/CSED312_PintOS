@@ -185,7 +185,6 @@ page_fault (struct intr_frame *f)
          exit(-1);
    }
 
-
   // 4. 새로 생성할 handle_fault()함수를 호출하여 이후의 과정 수행
   
 
