@@ -14,6 +14,7 @@ static long long page_fault_cnt;
 static void kill (struct intr_frame *);
 static void page_fault (struct intr_frame *);
 
+extern struct lock frame_lock;
 /* Registers handlers for interrupts that can be caused by user
    programs.
 
@@ -154,7 +155,14 @@ page_fault (struct intr_frame *f)
    //modifed for lab3
   // 1. read only 페이지에 대한 접근이 아니면 처리 
   if(is_kernel_vaddr(fault_addr) || !not_present) 
+  {
+      if(lock_held_by_current_thread(&frame_lock))
+      {
+         lock_release(&frame_lock);
+      }
       exit(-1);
+  }
+      
 
   // 2. frame table에서의 정보 찾기   
   struct vm_entry *vme = vme_find(fault_addr); 

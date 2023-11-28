@@ -190,6 +190,10 @@ pid_t exec (const char *cmd_line, void* esp)
           exit(-1);
         }
       }
+      else
+      {
+        exit(-1);
+      }
     }
     
     lock_acquire(&frame_lock);
@@ -382,6 +386,10 @@ int read (int fd, void *buffer, unsigned size, void* esp)
           exit(-1);
         }
       }
+      else
+      {
+        exit(-1);
+      }
     }
     lock_acquire(&frame_lock);
     size_t read_bt = remained > PGSIZE - pg_ofs(buffer_temp) ? PGSIZE - pg_ofs(buffer_temp) : remained;
@@ -443,12 +451,14 @@ int write (int fd, const void *buffer, unsigned size, void *esp)
   Fd 1 writes to the console -> should write all of buffer in one call to putbuf()
   */
   
- int bytes_write = 0;
- struct file* f;
- unsigned i;
+  int bytes_write = 0;
+  struct file* f;
+  unsigned i;
   for (i = 0; i < size; i++)
+  {
     is_valid_addr(buffer+i);
-  
+  }
+
   // pinning
   size_t remained = size;
   void *buffer_temp = (void*)buffer;
@@ -458,7 +468,7 @@ int write (int fd, const void *buffer, unsigned size, void *esp)
     struct vm_entry* vme = vme_find(pg_round_down(buffer_temp));
     if(vme)
     {
-      if(!vme->is_loaded)
+      if(!(vme->is_loaded))
       {
         if (!handle_fault(vme))
         {
@@ -477,6 +487,10 @@ int write (int fd, const void *buffer, unsigned size, void *esp)
         {
           exit(-1);
         }
+      }
+      else
+      {
+        exit(-1);
       }
     }
     
@@ -498,7 +512,7 @@ int write (int fd, const void *buffer, unsigned size, void *esp)
  }
  else if(fd > 1)
  {
-  f = process_get_file(fd);
+    f = process_get_file(fd);
     if(!f)
     {
       return -1;
