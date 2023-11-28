@@ -18,9 +18,9 @@ void frame_table_init(void)
 
 void frame_insert(struct frame *frame)
 {
-	lock_acquire(&frame_lock);
+	//lock_acquire(&frame_lock);
     list_push_back(&frame_table, &frame->ft_elem);
-	lock_release(&frame_lock);
+	//lock_release(&frame_lock);
 }
 
 void frame_delete(struct frame *frame)
@@ -93,9 +93,9 @@ void free_frame(void *addr)
 		frame->vme->is_loaded = false;
 		pagedir_clear_page(frame->thread->pagedir, frame->vme->vaddr);
 		palloc_free_page(frame->page_addr);
-		lock_acquire(&frame_lock);
+		//lock_acquire(&frame_lock);
 		frame_delete(frame);
-		lock_release(&frame_lock);
+		//lock_release(&frame_lock);
 		free(frame);
 	}
 }
@@ -137,9 +137,9 @@ void evict_frame()
 	// 4. free frame
 	pagedir_clear_page(frame->thread->pagedir, frame->vme->vaddr);
 	palloc_free_page(frame->page_addr);
-	lock_acquire(&frame_lock);
+	//lock_acquire(&frame_lock);
 	frame_delete(frame);
-	lock_release(&frame_lock);
+	//lock_release(&frame_lock);
 	frame->vme->is_loaded = false;
 	free(frame);
 	
@@ -193,7 +193,7 @@ struct frame* find_victim()
 
 void delete_all_frame(struct thread* t)
 {
-	lock_acquire(&frame_lock);
+	//lock_acquire(&frame_lock);
 	struct list_elem *e;
 	
 	for (e = list_begin(&frame_table); e != list_end(&frame_table);)
@@ -208,27 +208,19 @@ void delete_all_frame(struct thread* t)
 		else
 			e = list_next(e);
 	}
-	lock_release(&frame_lock);
+	//lock_release(&frame_lock);
 }
 
 void frame_pin(void *kaddr)
 {
 	struct frame *f;
-
-	lock_acquire(&frame_lock);
-	
 	f = frame_find(kaddr);
 	f->pinned = true;
-	lock_release(&frame_lock);
 }
 
 void frame_unpin(void *kaddr)
 {
 	struct frame *f;
-
-	lock_acquire(&frame_lock);
-
 	f = frame_find(kaddr);
 	f->pinned = false;
-	lock_release(&frame_lock);
 }

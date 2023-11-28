@@ -42,16 +42,22 @@ bool vme_insert (struct hash *vm, struct vm_entry *vme)
 
 bool vme_delete (struct hash *vm, struct vm_entry *vme) // syscall munmap에서 호출
 {
+	lock_acquire(&frame_lock);
 	// 인자로 받은 vme를 vm_entry에서 삭제
 	if (hash_delete(vm, &vme->elem))
 	{
 		free_frame(pagedir_get_page(thread_current()->pagedir, vme->vaddr));
 		swap_free(vme->swap_slot);
 		free(vme);
+		lock_release(&frame_lock);
 		return true;
 	}
 	else
+	{
+		lock_release(&frame_lock);
 		return false;
+	}
+		
 	
 }	
 
@@ -75,7 +81,7 @@ struct vm_entry *vme_find (void *vaddr)
 void vm_destroy_func(struct hash_elem *e, void *aux UNUSED)
 {
 	struct vm_entry *vme = hash_entry(e, struct vm_entry, elem);
-	
+	lock_acquire(&frame_lock);
 	if(vme)
 	{
 		if(vme->is_loaded)
@@ -83,13 +89,9 @@ void vm_destroy_func(struct hash_elem *e, void *aux UNUSED)
 			free_frame(pagedir_get_page(thread_current()->pagedir, vme->vaddr));
 			swap_free(vme->swap_slot);
 		}
-		// if(vme->is_loaded)
-		// {
-		// 	struct frame* frame_to_pin = find_frame_for_vaddr(vme->vaddr);
-		// 	frame_pin(frame_to_pin->page_addr);
-		// }
 		free(vme);
 	}	
+	lock_release(&frame_lock);
 	
 }
 

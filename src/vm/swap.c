@@ -25,7 +25,7 @@ void swap_init()
 	lock_init(&lock_swap);
 }
 
-void swap_in(size_t slot_index, void *kaddr)
+bool swap_in(size_t slot_index, void *kaddr)
 {
 	// 1. calculate number of sector for storing page
 	int start_sector = SECTOR_NUM_PER_PAGE * slot_index;
@@ -42,7 +42,10 @@ void swap_in(size_t slot_index, void *kaddr)
 	bitmap_set(swap_bitmap, slot_index, false);
 
     lock_release(&lock_swap); // lock release
+
+	return true;
 }
+
 size_t swap_out(void* kaddr)
 {
 	size_t slot_index;

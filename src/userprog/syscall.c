@@ -192,9 +192,11 @@ pid_t exec (const char *cmd_line, void* esp)
       }
     }
     
+    lock_acquire(&frame_lock);
     size_t read_bt = remained > PGSIZE - pg_ofs(buffer_temp) ? PGSIZE - pg_ofs(buffer_temp) : remained;
     struct frame* frame_to_pin = find_frame_for_vaddr(pg_round_down(buffer_temp));
     frame_pin(frame_to_pin->page_addr);
+    lock_release(&frame_lock);
     remained -= read_bt;
     buffer_temp += read_bt;
   }
@@ -216,11 +218,12 @@ pid_t exec (const char *cmd_line, void* esp)
   buffer_temp = (void*)cmd_line;
   while(remained > 0)
   {
+    lock_acquire(&frame_lock);
     // size_t ofs = buffer_temp - pg_round_down(buffer_temp);
     size_t read_bt = remained > PGSIZE - pg_ofs(buffer_temp) ? PGSIZE - pg_ofs(buffer_temp) : remained;
     struct frame* frame_to_pin = find_frame_for_vaddr(pg_round_down(buffer_temp));
     frame_unpin(frame_to_pin->page_addr);
-
+    lock_release(&frame_lock);
     remained -= read_bt;
     buffer_temp += read_bt;
   }
@@ -380,10 +383,11 @@ int read (int fd, void *buffer, unsigned size, void* esp)
         }
       }
     }
-    
+    lock_acquire(&frame_lock);
     size_t read_bt = remained > PGSIZE - pg_ofs(buffer_temp) ? PGSIZE - pg_ofs(buffer_temp) : remained;
     struct frame* frame_to_pin = find_frame_for_vaddr(pg_round_down(buffer_temp));
     frame_pin(frame_to_pin->page_addr);
+    lock_release(&frame_lock);
     remained -= read_bt;
     buffer_temp += read_bt;
   }
@@ -416,11 +420,12 @@ int read (int fd, void *buffer, unsigned size, void* esp)
   buffer_temp = (void*)buffer;
   while(remained > 0)
   {
+    lock_acquire(&frame_lock);
     // size_t ofs = buffer_temp - pg_round_down(buffer_temp);
     size_t read_bt = remained > PGSIZE - pg_ofs(buffer_temp) ? PGSIZE - pg_ofs(buffer_temp) : remained;
     struct frame* frame_to_pin = find_frame_for_vaddr(pg_round_down(buffer_temp));
     frame_unpin(frame_to_pin->page_addr);
-
+    lock_release(&frame_lock);
     remained -= read_bt;
     buffer_temp += read_bt;
   }
@@ -475,11 +480,13 @@ int write (int fd, const void *buffer, unsigned size, void *esp)
       }
     }
     
+    lock_acquire(&frame_lock);
     size_t write_bt = remained > PGSIZE - pg_ofs(buffer_temp) ? PGSIZE - pg_ofs(buffer_temp) : remained;
     struct frame* frame_to_pin = find_frame_for_vaddr(pg_round_down(buffer_temp));
     frame_pin(frame_to_pin->page_addr);
     remained -= write_bt;
     buffer_temp += write_bt;
+    lock_release(&frame_lock);
   }
 
  if(fd == 1)
@@ -503,17 +510,19 @@ int write (int fd, const void *buffer, unsigned size, void *esp)
  
  remained = size;
  buffer_temp = (void*)buffer;
+ 
  while(remained > 0)
   {
+    lock_acquire(&frame_lock);
     // size_t ofs = buffer_temp - pg_round_down(buffer_temp);
     size_t write_bt = remained > PGSIZE - pg_ofs(buffer_temp) ? PGSIZE - pg_ofs(buffer_temp) : remained;
     struct frame* frame_to_pin = find_frame_for_vaddr(pg_round_down(buffer_temp));
     frame_unpin(frame_to_pin->page_addr);
-
     remained -= write_bt;
     buffer_temp += write_bt;
+    lock_release(&frame_lock);
   }
-
+  
  return bytes_write;
 
 }
@@ -656,7 +665,9 @@ void munmap(mapid_t mapid)
       lock_acquire(&filesys_lock);
       file_write_at(vme->file, vme->vaddr, vme->read_bytes, vme->offset);
       lock_release(&filesys_lock);
+      lock_acquire(&frame_lock);
       free_frame(pagedir_get_page(thread_current()->pagedir, vme->vaddr));
+      lock_release(&frame_lock);
     }
     vme->is_loaded = false;
     e = list_remove(e);

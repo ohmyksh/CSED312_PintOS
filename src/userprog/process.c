@@ -300,11 +300,12 @@ load (const char *file_name, void (**eip) (void), void **esp)
   if (file == NULL) 
     {
       printf ("load: %s: open failed\n", file_name);
+      lock_release(&filesys_lock);
       goto done; 
     }
   t->cur_file = file;
   //file_deny_write(file);
-  
+  lock_release(&filesys_lock);
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
       || memcmp (ehdr.e_ident, "\177ELF\1\1\1", 7)
@@ -389,7 +390,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
  done:
   /* We arrive here whether the load is successful or not. */
   //file_close (file);
-  lock_release(&filesys_lock);
+  
   return success;
 }
 
@@ -517,7 +518,7 @@ setup_stack (void **esp)
   uint8_t *kpage;
   struct frame* frame;
   bool success = false;
-
+  lock_acquire(&frame_lock);
   frame = alloc_frame(PAL_USER | PAL_ZERO);
   //kpage = palloc_get_page (PAL_USER | PAL_ZERO);
   
@@ -528,7 +529,11 @@ setup_stack (void **esp)
         {
           frame->vme = vme_construct(VM_ANON, ((uint8_t *)PHYS_BASE) - PGSIZE, true, true, NULL, NULL, 0, 0);
           if (!frame->vme)
+          {
+            lock_release(&frame_lock);
             return false;
+          }
+            
           // 3. vme_insert()로 생성한 vm_entry를 추가
           vme_insert(&thread_current()->vm, frame->vme);
           *esp = PHYS_BASE;
@@ -539,6 +544,7 @@ setup_stack (void **esp)
       }
         
     }
+  lock_release(&frame_lock);
   return success;
 }
 
@@ -651,6 +657,7 @@ bool handle_fault(struct vm_entry *vme)
   bool success = false;
   // 1. 물리 메모리 페이지를 할당 받음
   // 이때 PAL_USER flag를 사용해서 user pool에 할당
+  lock_acquire(&frame_lock);
   struct frame* frame = alloc_frame (PAL_USER);
   frame->vme = vme;
   // 3. vme의 type에 따라 switch문으로 알맞게 처리
@@ -659,34 +666,34 @@ bool handle_fault(struct vm_entry *vme)
 	  // VM_BIN일 경우 load_file 함수를 호출하여 physical mem에 load한다. 
     case VM_BIN:
       success = load_file(frame->page_addr, vme);
-      if (!success)
-      {
-        free_frame(frame->page_addr);
-        return false;
-      }
       break;
     case VM_FILE:
       success = load_file(frame->page_addr, vme);
-      if (!success)
-      {
-        free_frame(frame->page_addr);
-        return false;
-      }
       break;
     case VM_ANON:
-      swap_in(vme->swap_slot, frame->page_addr);
+      success = swap_in(vme->swap_slot, frame->page_addr);
       break;
     default:
+      lock_release(&frame_lock);
       return false;
+  }
+
+  if (!success)
+  {
+    free_frame(frame->page_addr);
+    lock_release(&frame_lock);
+    return false;
   }
   if (!install_page(vme->vaddr, frame->page_addr, vme->writable))
   {
     free_frame(frame->page_addr);
+    lock_release(&frame_lock);
     return false;
   }
 
   // 5. 다 끝나면 vme의 is_loaded를 true로 만들기
   vme->is_loaded = true;
+  lock_release(&frame_lock);
   return true;
 }
 
@@ -698,6 +705,7 @@ bool expand_stack(void *addr)
   bool success = false;
 	
 	// 1. user mode용 frame 할당하고 0으로 초기화
+  lock_acquire(&frame_lock);
 	frame = alloc_frame(PAL_USER | PAL_ZERO);
 	if (frame)
   {
@@ -706,6 +714,7 @@ bool expand_stack(void *addr)
     if (!success)
     {
       free_frame(frame->page_addr); // page 할당 해제
+      lock_release(&frame_lock);
       return success;
     }
     else
@@ -713,12 +722,20 @@ bool expand_stack(void *addr)
       // 3. 해당하는 vm entry 생성
       frame->vme = vme_construct(VM_ANON, upage, true, true, NULL, NULL, 0, 0);
       if (!frame->vme)
+      {
+        lock_release(&frame_lock);
         return false;
+      }
       // 3. vme_insert()로 생성한 vm_entry를 추가
       vme_insert(&thread_current()->vm, frame->vme);
+      lock_release(&frame_lock);
       return success;
     }
   }
 	else
+  {
+    lock_release(&frame_lock);
     return success;
+  }
+    
 }
