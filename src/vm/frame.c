@@ -70,7 +70,7 @@ struct frame* alloc_frame(enum palloc_flags flags)
 
     frame->thread = thread_current();
     frame->page_addr = palloc_get_page(flags);
-    while (!frame->page_addr)
+    while (!(frame->page_addr))
     {
         evict_frame();
         frame->page_addr = palloc_get_page(flags); 
@@ -87,24 +87,24 @@ struct frame* alloc_frame(enum palloc_flags flags)
 
 void free_frame(void *addr)
 {
-	lock_acquire(&frame_lock);
 	struct frame *frame = frame_find(addr);
 	if (frame)
 	{	
 		frame->vme->is_loaded = false;
 		pagedir_clear_page(frame->thread->pagedir, frame->vme->vaddr);
-		frame_delete(frame);
 		palloc_free_page(frame->page_addr);
+		lock_acquire(&frame_lock);
+		frame_delete(frame);
+		lock_release(&frame_lock);
 		free(frame);
 	}
-	lock_release(&frame_lock);
 }
 
 // 6. swap table
 
 void evict_frame()
 {
-	lock_acquire(&frame_lock);
+	
 	// 1. victim frame 찾기
   	struct frame *frame = find_victim();
 	// 2. 해당 frame의 dirty bit 확인
@@ -124,8 +124,9 @@ void evict_frame()
 		case VM_BIN:
 			if(dirty)
 			{	
-				frame->vme->swap_slot = swap_out(frame->page_addr);
 				frame->vme->type = VM_ANON;
+				frame->vme->swap_slot = swap_out(frame->page_addr);
+				
 			}
 			break;
 		case VM_ANON:
@@ -134,12 +135,14 @@ void evict_frame()
 	}
 	
 	// 4. free frame
-	frame->vme->is_loaded = false;
 	pagedir_clear_page(frame->thread->pagedir, frame->vme->vaddr);
-	frame_delete(frame);
 	palloc_free_page(frame->page_addr);
-	free(frame);
+	lock_acquire(&frame_lock);
+	frame_delete(frame);
 	lock_release(&frame_lock);
+	frame->vme->is_loaded = false;
+	free(frame);
+	
 }
 
 

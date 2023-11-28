@@ -76,14 +76,21 @@ void vm_destroy_func(struct hash_elem *e, void *aux UNUSED)
 {
 	struct vm_entry *vme = hash_entry(e, struct vm_entry, elem);
 	
-	//free_frame(pagedir_get_page(thread_current()->pagedir, vme->vaddr));
-	swap_free(vme->swap_slot);
-	if(vme->is_loaded)
+	if(vme)
 	{
-		struct frame* frame_to_pin = find_frame_for_vaddr(vme->vaddr);
-		frame_pin(frame_to_pin->page_addr);
-	}
-	free(vme);
+		if(vme->is_loaded)
+		{
+			free_frame(pagedir_get_page(thread_current()->pagedir, vme->vaddr));
+			swap_free(vme->swap_slot);
+		}
+		// if(vme->is_loaded)
+		// {
+		// 	struct frame* frame_to_pin = find_frame_for_vaddr(vme->vaddr);
+		// 	frame_pin(frame_to_pin->page_addr);
+		// }
+		free(vme);
+	}	
+	
 }
 
 void vm_destroy (struct hash *vm)

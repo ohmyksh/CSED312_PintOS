@@ -118,8 +118,7 @@ void
 palloc_free_multiple (void *pages, size_t page_cnt) 
 {
   struct pool *pool;
-  size_t page_idx;
-
+  size_t page_idx;//수정한것임!
   ASSERT (pg_ofs (pages) == 0);
   if (pages == NULL || page_cnt == 0)
     return;

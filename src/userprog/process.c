@@ -153,7 +153,7 @@ process_exit (void)
 {
   struct thread *cur = thread_current ();
   uint32_t *pd;
-
+  
   /* modified for lab2_3*/
   int i;
   for(i = 2; i < cur->fd_max; i++) 
@@ -161,12 +161,12 @@ process_exit (void)
     close(i);
   }
 
-  palloc_free_page(cur->fd_table);
   file_close(cur->cur_file);
-
-  // modified for lab3
   for (i = 1 ; i<cur->mmap_next ;i++)
     munmap(i);
+
+  palloc_free_page(cur->fd_table);
+  // modified for lab3
 
   vm_destroy(&cur->vm);
   /* Destroy the current process's page directory and switch back
@@ -183,7 +183,7 @@ process_exit (void)
          that's been freed (and cleared). */
       cur->pagedir = NULL;
       pagedir_activate (NULL);
-      delete_all_frame(thread_current());
+      //delete_all_frame(thread_current());
       pagedir_destroy (pd);
     }
 }
@@ -286,14 +286,14 @@ load (const char *file_name, void (**eip) (void), void **esp)
   off_t file_ofs;
   bool success = false;
   int i;
-
-  lock_acquire(&filesys_lock);
+  
   /* Allocate and activate page directory. */
   t->pagedir = pagedir_create ();
   if (t->pagedir == NULL) 
     goto done;
   process_activate ();
 
+  lock_acquire(&filesys_lock);
 
   /* Open executable file. */
   file = filesys_open (file_name);
@@ -303,7 +303,7 @@ load (const char *file_name, void (**eip) (void), void **esp)
       goto done; 
     }
   t->cur_file = file;
-  file_deny_write(file);
+  //file_deny_write(file);
   
   /* Read and verify executable header. */
   if (file_read (file, &ehdr, sizeof ehdr) != sizeof ehdr
@@ -495,7 +495,6 @@ load_segment (struct file *file, off_t ofs, uint8_t *upage,
       //     free_frame(frame->page_addr);
       //     return false; 
       //   }
-
       struct vm_entry *vme = vme_construct(VM_BIN, upage, writable, false, file, ofs, page_read_bytes, page_zero_bytes);
       if (!vme)
         return false;
@@ -533,7 +532,7 @@ setup_stack (void **esp)
           // 3. vme_insert()로 생성한 vm_entry를 추가
           vme_insert(&thread_current()->vm, frame->vme);
           *esp = PHYS_BASE;
-      } 
+        } 
       else
       {
         free_frame (frame->page_addr);
@@ -677,6 +676,8 @@ bool handle_fault(struct vm_entry *vme)
     case VM_ANON:
       swap_in(vme->swap_slot, frame->page_addr);
       break;
+    default:
+      return false;
   }
   if (!install_page(vme->vaddr, frame->page_addr, vme->writable))
   {
@@ -684,7 +685,7 @@ bool handle_fault(struct vm_entry *vme)
     return false;
   }
 
-  // 5. 다 끝나면 vme의 is_loaded를 true로 만들고 return true
+  // 5. 다 끝나면 vme의 is_loaded를 true로 만들기
   vme->is_loaded = true;
   return true;
 }
