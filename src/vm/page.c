@@ -87,7 +87,7 @@ void vm_destroy_func(struct hash_elem *e, void *aux UNUSED)
 		if(vme->is_loaded)
 		{
 			free_frame(pagedir_get_page(thread_current()->pagedir, vme->vaddr));
-			swap_free(vme->swap_slot);
+			//swap_free(vme->swap_slot);
 		}
 		free(vme);
 	}	

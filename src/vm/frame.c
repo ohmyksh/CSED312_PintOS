@@ -124,9 +124,8 @@ void evict_frame()
 		case VM_BIN:
 			if(dirty)
 			{	
-				frame->vme->type = VM_ANON;
 				frame->vme->swap_slot = swap_out(frame->page_addr);
-				
+				frame->vme->type = VM_ANON;
 			}
 			break;
 		case VM_ANON:
