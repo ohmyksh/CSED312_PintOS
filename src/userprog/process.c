@@ -166,8 +166,8 @@ process_exit (void)
     munmap(i);
 
   palloc_free_page(cur->fd_table);
+ 
   // modified for lab3
-
   vm_destroy(&cur->vm);
   /* Destroy the current process's page directory and switch back
      to the kernel-only page directory. */
@@ -183,7 +183,6 @@ process_exit (void)
          that's been freed (and cleared). */
       cur->pagedir = NULL;
       pagedir_activate (NULL);
-      //delete_all_frame(thread_current());
       pagedir_destroy (pd);
     }
 }
@@ -663,7 +662,6 @@ bool handle_fault(struct vm_entry *vme)
   // 3. vme의 type에 따라 switch문으로 알맞게 처리
   switch(vme->type)
   {
-	  // VM_BIN일 경우 load_file 함수를 호출하여 physical mem에 load한다. 
     case VM_BIN:
       success = load_file(frame->page_addr, vme);
       break;

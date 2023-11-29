@@ -7,8 +7,8 @@
 #include "filesys/file.h"
 
 extern struct lock filesys_lock;
-// Managing frame table
 
+// Managing frame table
 void frame_table_init(void)
 {
     list_init(&frame_table);
@@ -18,9 +18,7 @@ void frame_table_init(void)
 
 void frame_insert(struct frame *frame)
 {
-	//lock_acquire(&frame_lock);
     list_push_back(&frame_table, &frame->ft_elem);
-	//lock_release(&frame_lock);
 }
 
 void frame_delete(struct frame *frame)
@@ -93,9 +91,7 @@ void free_frame(void *addr)
 		frame->vme->is_loaded = false;
 		pagedir_clear_page(frame->thread->pagedir, frame->vme->vaddr);
 		palloc_free_page(frame->page_addr);
-		//lock_acquire(&frame_lock);
 		frame_delete(frame);
-		//lock_release(&frame_lock);
 		free(frame);
 	}
 }
@@ -136,9 +132,7 @@ void evict_frame()
 	// 4. free frame
 	pagedir_clear_page(frame->thread->pagedir, frame->vme->vaddr);
 	palloc_free_page(frame->page_addr);
-	//lock_acquire(&frame_lock);
 	frame_delete(frame);
-	//lock_release(&frame_lock);
 	frame->vme->is_loaded = false;
 	free(frame);
 	
@@ -190,25 +184,6 @@ struct frame* find_victim()
 	}
 }
 
-void delete_all_frame(struct thread* t)
-{
-	//lock_acquire(&frame_lock);
-	struct list_elem *e;
-	
-	for (e = list_begin(&frame_table); e != list_end(&frame_table);)
-	{
-		struct frame * f = list_entry(e, struct frame, ft_elem);
-		if(f->thread == t)
-		{
-			frame_delete(f);
-			e = list_remove(e);
-			free(f);
-		}
-		else
-			e = list_next(e);
-	}
-	//lock_release(&frame_lock);
-}
 
 void frame_pin(void *kaddr)
 {

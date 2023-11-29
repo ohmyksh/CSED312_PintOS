@@ -433,9 +433,9 @@ int read (int fd, void *buffer, unsigned size, void* esp)
     size_t read_bt = remained > PGSIZE - pg_ofs(buffer_temp) ? PGSIZE - pg_ofs(buffer_temp) : remained;
     struct frame* frame_to_pin = find_frame_for_vaddr(pg_round_down(buffer_temp));
     frame_unpin(frame_to_pin->page_addr);
-    lock_release(&frame_lock);
     remained -= read_bt;
     buffer_temp += read_bt;
+    lock_release(&frame_lock);
   }
   return bytes_read;
 }

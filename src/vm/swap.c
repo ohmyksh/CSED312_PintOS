@@ -73,12 +73,3 @@ size_t swap_out(void* kaddr)
 	// 3. swap한 index 반환
     return slot_index;
 }
-
-void swap_free(size_t slot_index)
-{
-	if(slot_index == 0)
-		return;
-	lock_acquire(&lock_swap);
-	bitmap_set(swap_bitmap, slot_index, false);
-	lock_release(&lock_swap);
-}

@@ -47,7 +47,6 @@ bool vme_delete (struct hash *vm, struct vm_entry *vme) // syscall munmap에서 
 	if (hash_delete(vm, &vme->elem))
 	{
 		free_frame(pagedir_get_page(thread_current()->pagedir, vme->vaddr));
-		swap_free(vme->swap_slot);
 		free(vme);
 		lock_release(&frame_lock);
 		return true;
@@ -87,7 +86,6 @@ void vm_destroy_func(struct hash_elem *e, void *aux UNUSED)
 		if(vme->is_loaded)
 		{
 			free_frame(pagedir_get_page(thread_current()->pagedir, vme->vaddr));
-			//swap_free(vme->swap_slot);
 		}
 		free(vme);
 	}	

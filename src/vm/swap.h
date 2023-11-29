@@ -7,6 +7,5 @@
 void swap_init(void);
 bool swap_in(size_t slot_index, void *kaddr);
 size_t swap_out(void* kaddr);
-void swap_free(size_t slot_index);
 
 #endif

@@ -30,12 +30,10 @@ struct frame* frame_find(void* addr);
 struct frame* find_frame_for_vaddr(void* vaddr);
 void free_frame(void *addr);
 
-
 void evict_frame(void);
 struct frame* find_victim(void);
 
 void frame_pin(void *kaddr);
 void frame_unpin(void *kaddr);
 
-void delete_all_frame(struct thread* t);
 #endif
