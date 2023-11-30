@@ -153,9 +153,10 @@ page_fault (struct intr_frame *f)
   user = (f->error_code & PF_U) != 0;
   
    //modifed for lab3
-  // 1. read only 페이지에 대한 접근이 아니면 처리 
+  // 1. 유효한 페이지에 대한 접근이 아니면 처리 
   if(is_kernel_vaddr(fault_addr) || !not_present) 
   {
+      // sync을 위하여 lock을 relase
       if(lock_held_by_current_thread(&frame_lock))
       {
          lock_release(&frame_lock);
@@ -164,7 +165,7 @@ page_fault (struct intr_frame *f)
   }
       
 
-  // 2. frame table에서의 정보 찾기   
+  // 2. vm_entry 정보 찾기   
   struct vm_entry *vme = vme_find(fault_addr); 
   // 3. 해당 entry의 유효성을 확인
    void* esp = user ? f->esp : thread_current()->esp;

@@ -70,6 +70,7 @@ struct frame* alloc_frame(enum palloc_flags flags)
     frame->page_addr = palloc_get_page(flags);
     while (!(frame->page_addr))
     {
+		// evict하고 다시 할당해준다
         evict_frame();
         frame->page_addr = palloc_get_page(flags); 
     }

@@ -56,8 +56,6 @@ bool vme_delete (struct hash *vm, struct vm_entry *vme) // syscall munmap에서 
 		lock_release(&frame_lock);
 		return false;
 	}
-		
-	
 }	
 
 struct vm_entry *vme_find (void *vaddr)
